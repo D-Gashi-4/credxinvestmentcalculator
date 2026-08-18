@@ -869,6 +869,14 @@
                 : `You are in the top rate band.`;
             document.getElementById('nextTierNote').textContent = nextNote;
 
+            // Update capacity warning
+            if (currentInvestment === currentDeal.netRequired) {
+                document.getElementById('capacityWarning').textContent = 'Full deal amount. No remaining capacity.';
+            } else {
+                const remaining = currentDeal.netRequired - currentInvestment;
+                document.getElementById('capacityWarning').textContent = `Partial investment. Remaining deal capacity: ${formatCurrency(remaining)}`;
+            }
+
             // Update returns
             document.getElementById('returnInvestment').textContent = formatCurrency(currentInvestment);
             document.getElementById('returnRate').textContent = rate.toFixed(2) + '% p.a.';
