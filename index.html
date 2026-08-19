@@ -106,6 +106,20 @@
             height: 40px;
         }
 
+        @media (prefers-color-scheme: dark) {
+            html:not(.light-mode) .logo {
+                filter: brightness(0) invert(1);
+            }
+        }
+
+        html.dark-mode .logo {
+            filter: brightness(0) invert(1);
+        }
+
+        html.light-mode .logo {
+            filter: none;
+        }
+
         .logo-tagline {
             border-left: 1px solid var(--rule);
             padding-left: 16px;
@@ -927,7 +941,7 @@
                 fixedRate: 15.0,
                 status: 'open',
                 closes: '',
-                termSheetUrl: '',
+                termSheetUrl: 'docs/CDX-55_Investor_Term_Sheet.docx',
                 valuationUrl: ''
             },
             {
@@ -939,7 +953,7 @@
                 termMonths: 6,
                 status: 'open',
                 closes: 'Expressions of interest close 26 August 2026',
-                termSheetUrl: '',
+                termSheetUrl: 'docs/CDX-45_Investor_Term_Sheet.pdf',
                 valuationUrl: ''
             }
         ];
@@ -957,7 +971,8 @@
                 '{ref}-Investor-Term-Sheet.pdf',
                 '{ref}_Investor_Term_Sheet.pdf',
                 '{ref}-investor-term-sheet.pdf',
-                '{ref}_investor_term_sheet.pdf'
+                '{ref}_investor_term_sheet.pdf',
+                '{ref}_Investor_Term_Sheet.docx'
             ],
             valuation: [
                 '{ref}-valuation-report.pdf',
@@ -990,10 +1005,12 @@
         function setTheme(isDark) {
             if (isDark) {
                 document.documentElement.classList.add('dark-mode');
+                document.documentElement.classList.remove('light-mode');
                 localStorage.setItem('credx-theme', 'dark');
                 document.getElementById('themeToggle').textContent = '☀️';
             } else {
                 document.documentElement.classList.remove('dark-mode');
+                document.documentElement.classList.add('light-mode');
                 localStorage.setItem('credx-theme', 'light');
                 document.getElementById('themeToggle').textContent = '🌙';
             }
@@ -1105,10 +1122,46 @@
         }
 
         // ===== HOME PAGE =====
-        function updateDealCards() {
+        async function updateDealCards() {
             const dealList = document.getElementById('dealList');
-            dealList.innerHTML = DEALS.map(deal => {
+            const dealsWithDocuments = await Promise.all(DEALS.map(async deal => ({
+                deal,
+                termSheetPath: deal.termSheetUrl || await resolveDocumentPath(deal.ref, 'termSheet'),
+                valuationPath: deal.valuationUrl || await resolveDocumentPath(deal.ref, 'valuation')
+            })));
+
+            dealList.innerHTML = dealsWithDocuments.map(({ deal, termSheetPath, valuationPath }) => {
                 const isClosed = deal.status !== 'open';
+                const termSheetLink = termSheetPath
+                    ? `<a href="${termSheetPath}" class="deal-link">
+                            <div>
+                                <span>Investor Term Sheet</span>
+                                <span class="link-sublabel">Open document</span>
+                            </div>
+                            <span class="link-arrow">›</span>
+                        </a>`
+                    : `<a href="${buildRequestLink(deal.ref, 'Investor term sheet')}" class="deal-link">
+                            <div>
+                                <span>Investor Term Sheet</span>
+                                <span class="link-sublabel">Request by email</span>
+                            </div>
+                            <span class="link-arrow">›</span>
+                        </a>`;
+                const valuationLink = valuationPath
+                    ? `<a href="${valuationPath}" class="deal-link">
+                            <div>
+                                <span>Valuation Report</span>
+                                <span class="link-sublabel">Open document</span>
+                            </div>
+                            <span class="link-arrow">›</span>
+                        </a>`
+                    : `<a href="${buildRequestLink(deal.ref, 'Valuation report')}" class="deal-link">
+                            <div>
+                                <span>Valuation Report</span>
+                                <span class="link-sublabel">Request by email</span>
+                            </div>
+                            <span class="link-arrow">›</span>
+                        </a>`;
                 return `
                     <div class="deal-card">
                         <div class="deal-header">
@@ -1135,7 +1188,7 @@
                                     <div class="metric-label">RETURN</div>
                                     <div class="metric-value">${
                                         typeof deal.fixedRate === 'number'
-                                            ? (deal.fixedRate * 100).toFixed(2) + '%'
+                                            ? deal.fixedRate.toFixed(2) + '%'
                                             : '9.50% - 10.50%'
                                     }</div>
                                 </div>
@@ -1149,20 +1202,8 @@
                                     </div>
                                     <span class="link-arrow">›</span>
                                 </a>
-                                <a href="mailto:dg@credx.co.uk?subject=${encodeURIComponent(`Term Sheet request - ${deal.ref} ${deal.address}`)}" class="deal-link">
-                                    <div>
-                                        <span>Investor Term Sheet</span>
-                                        <span class="link-sublabel">Request by email</span>
-                                    </div>
-                                    <span class="link-arrow">›</span>
-                                </a>
-                                <a href="mailto:dg@credx.co.uk?subject=${encodeURIComponent(`Valuation Report request - ${deal.ref} ${deal.address}`)}" class="deal-link">
-                                    <div>
-                                        <span>Valuation Report</span>
-                                        <span class="link-sublabel">Request by email</span>
-                                    </div>
-                                    <span class="link-arrow">›</span>
-                                </a>
+                                ${termSheetLink}
+                                ${valuationLink}
                                 <a href="mailto:dg@credx.co.uk?subject=${encodeURIComponent(`Investment enquiry - ${deal.ref} ${deal.address}`)}" class="deal-link">
                                     <div>
                                         <span>Speak to Investor Relations</span>
@@ -1285,13 +1326,13 @@
         async function updateDocuments() {
             const selectedRef = currentDeal.ref;
             const [termSheetPath, valuationPath] = await Promise.all([
-                resolveDocumentPath(selectedRef, 'termSheet'),
-                resolveDocumentPath(selectedRef, 'valuation')
+                currentDeal.termSheetUrl || resolveDocumentPath(selectedRef, 'termSheet'),
+                currentDeal.valuationUrl || resolveDocumentPath(selectedRef, 'valuation')
             ]);
 
             if (currentDeal.ref !== selectedRef) return;
 
-            renderDocumentLink('termSheet', termSheetPath, 'Open PDF', 'Request', 'Full terms and conditions');
+            renderDocumentLink('termSheet', termSheetPath, 'Open document', 'Request', 'Full terms and conditions');
             renderDocumentLink('valuation', valuationPath, 'Open PDF', 'Request', 'Security valuation and property detail');
         }
 
