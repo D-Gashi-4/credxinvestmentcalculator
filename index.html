@@ -594,6 +594,54 @@
             color: var(--muted);
         }
 
+        .hint.hidden {
+            display: none;
+        }
+
+        .documents-section {
+            margin-bottom: 1rem;
+        }
+
+        .document-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        .document-row:last-child {
+            border-bottom: none;
+        }
+
+        .document-copy {
+            min-width: 0;
+        }
+
+        .document-title {
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 20px;
+            color: var(--ink);
+        }
+
+        .document-meta {
+            margin-top: 2px;
+            font-size: 12px;
+            line-height: 18px;
+            color: var(--muted);
+        }
+
+        .document-link {
+            flex: 0 0 auto;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
         @media (max-width: 600px) {
             .quick-buttons {
                 display: grid;
@@ -680,11 +728,13 @@
                 </div>
             </div>
 
-            <div class="section-title">Rate Bands</div>
-            <div class="rate-bands" id="rateBands">
-                <!-- Populated by JavaScript -->
+            <div id="rateBandsSection">
+                <div class="section-title">Rate Bands</div>
+                <div class="rate-bands" id="rateBands">
+                    <!-- Populated by JavaScript -->
+                </div>
             </div>
-            <div class="hint" id="nextTierNote">&nbsp;</div>
+            <div class="hint" id="rateBasisNote">&nbsp;</div>
         
         </div>
 
@@ -732,11 +782,29 @@
                     <span id="breakdownReturned">£350,691.67</span>
                 </div>
             </div>
+
+            <div class="section-title">Documents</div>
+            <div class="breakdown-section documents-section">
+                <div class="document-row">
+                    <div class="document-copy">
+                        <div class="document-title">Investor Term Sheet</div>
+                        <div class="document-meta" id="termSheetMeta">Request by email</div>
+                    </div>
+                    <a class="document-link" id="termSheetLink" href="mailto:dg@credx.co.uk?subject=Document%20Request" aria-disabled="true">Request</a>
+                </div>
+                <div class="document-row">
+                    <div class="document-copy">
+                        <div class="document-title">Valuation Report</div>
+                        <div class="document-meta" id="valuationMeta">Request by email</div>
+                    </div>
+                    <a class="document-link" id="valuationLink" href="mailto:dg@credx.co.uk?subject=Document%20Request" aria-disabled="true">Request</a>
+                </div>
+            </div>
         </div>
 
         <a href="" id="registerLink" class="cta-button">REGISTER INTEREST</a>
 
-        <div class="disclaimer">
+        <div class="disclaimer" id="returnsDisclaimer">
             Returns calculated on a simple interest basis over the fixed term, paid upon redemption. Rate is determined by the investment amount bands shown above. For illustration only and not a guarantee of returns. Capital and unpaid interest are at risk. Loans made through CredX are not protected by the FSCS.
         </div>
 
@@ -750,8 +818,17 @@
         // Configuration
         const DEALS = [
             {
+                ref: 'CDX-55',
+                address: 'Deal details available on request',
+                summary: 'Short-term bridging loan · 3 months fixed · Flat investor rate',
+                netRequired: 68523.15,
+                termMonths: 3,
+                fixedRate: 15.0,
+                closes: 'Expressions of interest currently open'
+            },
+            {
                 ref: 'CDX-45',
-                address: '10 York Road, Hounslow',
+                address: 'Barrow House, DT6 3JA',
                 summary: 'Residential bridging loan · 6 months fixed · Exit: refinance / sale',
                 netRequired: 333198.74,
                 termMonths: 6,
@@ -764,6 +841,28 @@
             { min: 50000, max: 99999.99, rate: 10.00, range: '£50,000 - £99,999.99', rate_s: '10.00% p.a.' },
             { min: 100000, max: Infinity, rate: 10.50, range: '£100,000 and above', rate_s: '10.50% p.a.' }
         ];
+
+        const DOCUMENT_PATTERNS = {
+            termSheet: [
+                '{ref}-term-sheet.pdf',
+                '{ref}-term-sheet.PDF',
+                '{ref}-Investor-Term-Sheet.pdf',
+                '{ref}_Investor_Term_Sheet.pdf',
+                '{ref}-investor-term-sheet.pdf',
+                '{ref}_investor_term_sheet.pdf'
+            ],
+            valuation: [
+                '{ref}-valuation-report.pdf',
+                '{ref}-valuation-report.PDF',
+                '{ref}_Valuation_Report.pdf',
+                '{ref}-Valuation-Report.pdf',
+                '{ref}-valuation.pdf',
+                '{ref}_valuation_report.pdf'
+            ]
+        };
+
+        const documentCache = new Map();
+        const dealLookup = new Map(DEALS.map(deal => [deal.ref.toUpperCase(), deal]));
 
         let currentDeal = DEALS[0];
         let currentInvestment = currentDeal.netRequired;
@@ -817,6 +916,150 @@
             return RATE_BANDS.find(band => amount >= band.min && amount <= band.max);
         }
 
+        function getActiveRate(amount) {
+            if (typeof currentDeal.fixedRate === 'number') {
+                return currentDeal.fixedRate;
+            }
+
+            return getRateBand(amount).rate;
+        }
+
+        function getSelectedDeal() {
+            const params = new URLSearchParams(window.location.search);
+            const requestedDeal = (params.get('deal') || '').trim().toUpperCase();
+            return dealLookup.get(requestedDeal) || DEALS[0];
+        }
+
+        function updateQueryString(ref) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('deal', ref);
+            window.history.replaceState({}, '', url);
+        }
+
+        function buildDocumentCandidates(ref, type) {
+            return DOCUMENT_PATTERNS[type].map(pattern => `docs/${pattern.replaceAll('{ref}', ref)}`);
+        }
+
+        async function canFetchDocument(path) {
+            if (window.location.protocol === 'file:') {
+                return false;
+            }
+
+            try {
+                const response = await fetch(path, { method: 'HEAD', cache: 'no-store' });
+                if (response.ok) {
+                    return true;
+                }
+            } catch (error) {
+                // Ignore and fall back to a GET request.
+            }
+
+            try {
+                const response = await fetch(path, { method: 'GET', cache: 'no-store' });
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function resolveDocumentPath(ref, type) {
+            const cacheKey = `${ref}:${type}`;
+            if (documentCache.has(cacheKey)) {
+                return documentCache.get(cacheKey);
+            }
+
+            const candidates = buildDocumentCandidates(ref, type);
+            for (const candidate of candidates) {
+                if (await canFetchDocument(candidate)) {
+                    documentCache.set(cacheKey, candidate);
+                    return candidate;
+                }
+            }
+
+            documentCache.set(cacheKey, null);
+            return null;
+        }
+
+        function buildRequestLink(ref, label) {
+            const subject = `${label} request - ${ref}`;
+            return `mailto:dg@credx.co.uk?subject=${encodeURIComponent(subject)}`;
+        }
+
+        function renderDocumentLink(idPrefix, href, availableLabel, unavailableLabel, metaText) {
+            const link = document.getElementById(`${idPrefix}Link`);
+            const meta = document.getElementById(`${idPrefix}Meta`);
+
+            if (href) {
+                link.href = href;
+                link.textContent = availableLabel;
+                link.removeAttribute('aria-disabled');
+                meta.textContent = metaText;
+                return;
+            }
+
+            const label = idPrefix === 'termSheet' ? 'Investor term sheet' : 'Valuation report';
+            link.href = buildRequestLink(currentDeal.ref, label);
+            link.textContent = unavailableLabel;
+            link.setAttribute('aria-disabled', 'true');
+            meta.textContent = 'Request by email';
+        }
+
+        async function updateDocuments() {
+            const selectedRef = currentDeal.ref;
+            const [termSheetPath, valuationPath] = await Promise.all([
+                resolveDocumentPath(selectedRef, 'termSheet'),
+                resolveDocumentPath(selectedRef, 'valuation')
+            ]);
+
+            if (currentDeal.ref !== selectedRef) {
+                return;
+            }
+
+            renderDocumentLink('termSheet', termSheetPath, 'Open PDF', 'Request', 'Full terms and conditions');
+            renderDocumentLink('valuation', valuationPath, 'Open PDF', 'Request', 'Security valuation and property detail');
+        }
+
+        function updateDealSelector() {
+            const selector = document.getElementById('dealSelector');
+            const select = document.getElementById('dealSelect');
+
+            if (!select.dataset.initialized) {
+                select.innerHTML = DEALS.map(deal => `
+                    <option value="${deal.ref}">${deal.ref} — ${deal.address}</option>
+                `).join('');
+                select.addEventListener('change', (event) => {
+                    const selected = dealLookup.get(event.target.value.toUpperCase());
+                    if (selected) {
+                        currentDeal = selected;
+                        currentInvestment = currentDeal.netRequired;
+                        updateQueryString(currentDeal.ref);
+                        syncDealDisplay();
+                        updateDisplay();
+                        updateDocuments();
+                    }
+                });
+                select.dataset.initialized = 'true';
+            }
+
+            selector.classList.toggle('visible', DEALS.length > 1);
+            selector.hidden = DEALS.length <= 1;
+            select.value = currentDeal.ref;
+        }
+
+        function syncDealDisplay() {
+            document.title = `CredX Investor Return Calculator — ${currentDeal.ref}`;
+            document.getElementById('dealTitle').textContent = `${currentDeal.ref} — ${currentDeal.address}`;
+            document.getElementById('dealDesc').textContent = currentDeal.summary;
+            document.getElementById('termLabel').textContent = currentDeal.termMonths;
+            document.getElementById('termLabel2').textContent = currentDeal.termMonths;
+            document.getElementById('investmentSlider').max = currentDeal.netRequired;
+            document.getElementById('investmentSlider').value = currentInvestment;
+            document.getElementById('maxLabel').textContent = `Full deal ${formatCurrency(currentDeal.netRequired)}`;
+            document.getElementById('returnsDisclaimer').textContent = typeof currentDeal.fixedRate === 'number'
+                ? 'Returns calculated on a simple interest basis over the fixed term, paid upon redemption. This deal pays a single flat annual rate across the full investment amount. For illustration only and not a guarantee of returns. Capital and unpaid interest are at risk. Loans made through CredX are not protected by the FSCS.'
+                : 'Returns calculated on a simple interest basis over the fixed term, paid upon redemption. Rate is determined by the investment amount bands shown above. For illustration only and not a guarantee of returns. Capital and unpaid interest are at risk. Loans made through CredX are not protected by the FSCS.';
+        }
+
         // Set investment amount
         function setInvestment(amount) {
             currentInvestment = Math.min(amount, currentDeal.netRequired);
@@ -825,8 +1068,9 @@
 
         // Update all displays
         function updateDisplay() {
-            const band = getRateBand(currentInvestment);
-            const rate = band.rate;
+            const isFixedRateDeal = typeof currentDeal.fixedRate === 'number';
+            const band = isFixedRateDeal ? null : getRateBand(currentInvestment);
+            const rate = getActiveRate(currentInvestment);
             const monthlyRate = rate / 12 / 100;
             const monthlyInterest = currentInvestment * monthlyRate;
             const totalInterest = monthlyInterest * currentDeal.termMonths;
@@ -844,30 +1088,38 @@
             // Update slider fill width
             const min = 25000;
             const max = currentDeal.netRequired;
-            const pct = ((currentInvestment - min) / (max - min)) * 100;
+            const pct = max === min ? 100 : ((currentInvestment - min) / (max - min)) * 100;
             document.getElementById('sliderFill').style.width = pct.toFixed(2) + '%';
 
             // Update deal rate
             document.getElementById('dealRate').textContent = rate.toFixed(2) + '% p.a.';
 
             // Update rate bands
-            const rateBandsHTML = RATE_BANDS.map(b => {
-                const isCurrentBand = b.min <= currentInvestment && currentInvestment <= b.max;
-                return `
-                    <div class="rate-band${isCurrentBand ? ' current' : ''}">
-                        <span>${b.range}</span>
-                        <b>${b.rate.toFixed(2)}% p.a.</b>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('rateBands').innerHTML = rateBandsHTML;
+            const rateBandsSection = document.getElementById('rateBandsSection');
+            const rateBasisNote = document.getElementById('rateBasisNote');
+            if (isFixedRateDeal) {
+                rateBandsSection.style.display = 'none';
+                rateBasisNote.classList.remove('hidden');
+                rateBasisNote.textContent = `This deal pays a flat ${rate.toFixed(2)}% p.a. across the full investment amount.`;
+            } else {
+                rateBandsSection.style.display = '';
+                const rateBandsHTML = RATE_BANDS.map(b => {
+                    const isCurrentBand = b.min <= currentInvestment && currentInvestment <= b.max;
+                    return `
+                        <div class="rate-band${isCurrentBand ? ' current' : ''}">
+                            <span>${b.range}</span>
+                            <b>${b.rate.toFixed(2)}% p.a.</b>
+                        </div>
+                    `;
+                }).join('');
+                document.getElementById('rateBands').innerHTML = rateBandsHTML;
 
-            // Update next tier note
-            const next = RATE_BANDS.find(x => x.min > currentInvestment);
-            const nextNote = next 
-                ? `You are in the ${band.range} band. Next tier: ${next.range} from ${formatCurrency(next.min)}.`
-                : `You are in the top rate band.`;
-            document.getElementById('nextTierNote').textContent = nextNote;
+                const next = RATE_BANDS.find(x => x.min > currentInvestment);
+                rateBasisNote.classList.remove('hidden');
+                rateBasisNote.textContent = next
+                    ? `Add ${formatCurrency(next.min - currentInvestment)} to reach the ${next.range} band.`
+                    : 'You are already in the top rate band.';
+            }
 
             // Update capacity warning
             if (currentInvestment === currentDeal.netRequired) {
@@ -897,7 +1149,7 @@
 
         // Event listeners
         document.getElementById('investmentAmount').addEventListener('change', (e) => {
-            const value = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+            const value = parseFloat(e.target.value.replace(/,/g, '')) || 0;
             setInvestment(value);
         });
 
@@ -907,8 +1159,13 @@
         });
 
         // Initialize
+        currentDeal = getSelectedDeal();
+        currentInvestment = currentDeal.netRequired;
         initTheme();
+        updateDealSelector();
+        syncDealDisplay();
         updateDisplay();
+        updateDocuments();
     </script>
 </body>
 </html>
