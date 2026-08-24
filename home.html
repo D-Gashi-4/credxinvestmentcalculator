@@ -924,7 +924,7 @@
                 overview: 'First-charge bridging loan on an unencumbered residential freehold in Bridport, Dorset. 18.99% gross to value on a short-dated three-month facility.',
                 netRequired: 68523.15,
                 termMonths: 3,
-                fixedRate: 15.0,
+                fixedRate: 12.0,
                 status: 'open',
                 closes: '',
                 termSheetUrl: '',
@@ -1135,7 +1135,7 @@
                                     <div class="metric-label">RETURN</div>
                                     <div class="metric-value">${
                                         typeof deal.fixedRate === 'number'
-                                            ? (deal.fixedRate * 100).toFixed(2) + '%'
+                                            ? deal.fixedRate.toFixed(2) + '%'
                                             : '9.50% - 10.50%'
                                     }</div>
                                 </div>
