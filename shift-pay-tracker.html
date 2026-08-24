@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1E2230">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Track shifts, pay, bills and spending.">
+<title>Shift Pay Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F2F7; --card: #FFFFFF; --card2: #F2F0F7; --card3: #E4E1EC; --card4: #E9E6F0;
+    --line: #F0EEF4; --text: #1E2230; --mut: #7A8095; --mut2: #8A90A3; --dim: #9AA0B2;
+    --dim2: #A9AEBE; --faint: #C2C6D2; --accent: #F73F5C; --accentHi: #E22B49; --onAccent: #FFFFFF;
+    --clay: #E8503A; --sheet: #F7F6FA; --sheetLine: #EDEAF2; --grab: #D8D5E0; --circle: #CFCCD8;
+    --todayBg: #FFF1F4; --todayBorder: #FFC8D2; --dangerBg: #FDECE8; --dangerBgHi: #FADCD5;
+    --overlay: rgba(30,34,48,.42); --tabBg: #1E2230; --navy: #1E2230;
+    --sh: 0 8px 24px rgba(30,34,48,.07);
+  }
+  html[data-theme="dark"] {
+    --bg: #14161E; --card: #1E2130; --card2: #272B3B; --card3: #343949; --card4: #2E3344;
+    --line: #262A38; --text: #F4F5F8; --mut: #949AAC; --mut2: #8A90A3; --dim: #7C8296;
+    --dim2: #6C7286; --faint: #565C6E; --accent: #FF5A75; --accentHi: #FF7B90; --onAccent: #FFFFFF;
+    --clay: #FF8A5C; --sheet: #1B1E2A; --sheetLine: #2A2E3D; --grab: #3A3F4E; --circle: #454A59;
+    --todayBg: #2B1A22; --todayBorder: #5C2E3D; --dangerBg: #2E1C18; --dangerBgHi: #3E2620;
+    --overlay: rgba(8,9,14,.7); --tabBg: #232735; --navy: #232735;
+    --sh: 0 8px 24px rgba(0,0,0,.28);
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      --bg: #14161E; --card: #1E2130; --card2: #272B3B; --card3: #343949; --card4: #2E3344;
+      --line: #262A38; --text: #F4F5F8; --mut: #949AAC; --mut2: #8A90A3; --dim: #7C8296;
+      --dim2: #6C7286; --faint: #565C6E; --accent: #FF5A75; --accentHi: #FF7B90; --onAccent: #FFFFFF;
+      --clay: #FF8A5C; --sheet: #1B1E2A; --sheetLine: #2A2E3D; --grab: #3A3F4E; --circle: #454A59;
+      --todayBg: #2B1A22; --todayBorder: #5C2E3D; --dangerBg: #2E1C18; --dangerBgHi: #3E2620;
+      --overlay: rgba(8,9,14,.7); --tabBg: #232735; --navy: #232735;
+      --sh: 0 8px 24px rgba(0,0,0,.28);
+    }
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg, #F4F2F7); -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: var(--accent, #F73F5C); text-decoration: none; }
+  a:hover { color: #E22B49; }
+  button { font-family: inherit; cursor: pointer; border: 0; }
+  input, select { font-family: inherit; }
+  input[type="time"]::-webkit-calendar-picker-indicator { opacity: .45; }
+  html[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .5; }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .5; }
+  }
+  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+
+/* ---------- constants ---------- */
+var LS_KEY = 'shift-pay-tracker-v1';
+var PA = 12570, BASIC = 50270, HIGHER = 125140;
+var wPA = PA / 52, wBASIC = BASIC / 52, wHIGHER = HIGHER / 52;
+var NI_PT = 242, NI_UEL = 967;
+var JC = ['#F9506B', '#3D87F5', '#FB8C4B', '#8B7CF6', '#FBC93F'];
+var CATS = [
+  { name: 'Rent', color: '#3D87F5' },
+  { name: 'Bills', color: '#8B7CF6' },
+  { name: 'Food', color: '#FBC93F' },
+  { name: 'Travel', color: '#FB8C4B' },
+  { name: 'Going out', color: '#F9506B' },
+  { name: 'Other', color: '#9AA0B2' }
+];
+var CYCLE_LABEL = { weekly: 'every Friday', fortnightly: 'every 2 weeks', fourweekly: 'every 4 weeks', monthly: 'monthly', custom: 'custom cycle' };
+var DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+var MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+var SHOW_PENNIES = true;
+var ROUND_QUARTER = false;
+var DEFAULT_BREAK_MINS = 30;
+
+/* ---------- utils ---------- */
+var pad = function (n) { return String(n).padStart(2, '0'); };
+var dateKey = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+var parseKey = function (k) { var p = k.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+var addDays = function (d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; };
+var monday = function (d) { var x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+var mKey = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1); };
+var uid = function () { return Math.random().toString(36).slice(2, 9); };
+var catColor = function (n) { return (CATS.find(function (c) { return c.name === n; }) || CATS[5]).color; };
+var ord = function (n) { return (n % 10 === 1 && n !== 11) ? 'st' : (n % 10 === 2 && n !== 12) ? 'nd' : (n % 10 === 3 && n !== 13) ? 'rd' : 'th'; };
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function money(n, dp) {
+  var p = dp === undefined ? (SHOW_PENNIES ? 2 : 0) : dp;
+  return '\u00a3' + Math.abs(n).toLocaleString('en-GB', { minimumFractionDigits: p, maximumFractionDigits: p });
+}
+function hrs(n) {
+  var h = n;
+  if (ROUND_QUARTER) h = Math.round(h * 4) / 4;
+  return (Math.round(h * 100) / 100).toFixed(h % 1 === 0 ? 0 : (h * 10 % 1 === 0 ? 1 : 2)) + 'h';
+}
+
+function blank() {
+  return { user: { name: '' }, jobs: [], shifts: [], bills: [], spends: [], paid: {}, flat: false, flatPct: 20, theme: 'auto', pin: null, setup: false };
+}
+function loadData() {
+  var data = null;
+  try { var r = localStorage.getItem(LS_KEY); if (r) data = JSON.parse(r); } catch (e) {}
+  if (!data || !data.jobs) data = blank();
+  var OLDJC = { '#3FAE84': JC[0], '#D9A93F': JC[1], '#6E9BD1': JC[2], '#B98BD1': JC[3], '#CE7A56': JC[4] };
+  data.jobs.forEach(function (j, i) { j.color = OLDJC[j.color] || j.color || JC[i % JC.length]; });
+  return data;
+}
+function saveData() { try { localStorage.setItem(LS_KEY, JSON.stringify(D)); } catch (e) {} }
+
+/* ---------- state ---------- */
+var D = loadData();
+var unlockedInitially = !D.pin;
+try { if (sessionStorage.getItem(LS_KEY + '-open') === '1') unlockedInitially = true; } catch (e) {}
+
+var UI = {
+  unlocked: unlockedInitially,
+  entry: '',
+  pinEdit: '',
+  confirmWipe: false,
+  confirmJob: null,
+  su: { name: '', j1n: '', j1r: '', j1c: 'weekly', j1t: 'hour', j2t: 'hour', j2on: false, j2n: '', j2r: '', j2c: 'weekly', pin: '', pin2: '' },
+  suError: '',
+  tab: 'home',
+  weekOffset: 0,
+  calOffset: 0,
+  selDay: null,
+  chart: 'cat',
+  sheet: null,
+  form: {},
+  icsMsg: '',
+  drag: 0,
+  dragging: false
+};
+
+function setUI(patch) {
+  var p = typeof patch === 'function' ? patch(UI) : patch;
+  Object.assign(UI, p);
+  render();
+}
+function setD(fn) {
+  D = fn(JSON.parse(JSON.stringify(D)));
+  saveData();
+  render();
+}
+function suSet(k, v) { setUI(function (s) { var next = Object.assign({}, s.su); next[k] = v; return { su: next, suError: '' }; }); }
+
+function applyTheme() {
+  var t = D.theme || 'auto';
+  if (document.documentElement.getAttribute('data-theme') !== t) document.documentElement.setAttribute('data-theme', t);
+}
+
+function finishSetup() {
+  var s = UI.su;
+  var r1 = Number(s.j1r);
+  if (!s.j1n.trim() || !r1) { setUI({ suError: 'Give your first job a name and a rate.' }); return; }
+  if (s.j2on && (!s.j2n.trim() || !Number(s.j2r))) { setUI({ suError: 'Fill in the second job, or remove it.' }); return; }
+  if (s.pin && (s.pin.length !== 4 || s.pin !== s.pin2)) { setUI({ suError: 'The two codes need to match and be 4 digits.' }); return; }
+  var jobs = [{ id: uid(), name: s.j1n.trim(), rate: r1, payType: s.j1t || 'hour', cycle: s.j1c, color: JC[0], taxMode: 'paye', taxPct: 20, cutoffDays: 0 }];
+  if (s.j2on) jobs.push({ id: uid(), name: s.j2n.trim(), rate: Number(s.j2r), payType: s.j2t || 'hour', cycle: s.j2c, color: JC[1], taxMode: 'paye', taxPct: 20, cutoffDays: 0 });
+  D = Object.assign({}, D, { user: { name: s.name.trim() }, jobs: jobs, pin: s.pin || null, setup: true });
+  saveData();
+  UI.unlocked = true;
+  try { sessionStorage.setItem(LS_KEY + '-open', '1'); } catch (e) {}
+  render();
+}
+
+function tapPin(n) {
+  var e = (UI.entry + n).slice(0, 4);
+  if (e.length === 4) {
+    if (e === D.pin) { try { sessionStorage.setItem(LS_KEY + '-open', '1'); } catch (er) {} setUI({ entry: '', unlocked: true }); }
+    else setUI({ entry: '', suError: 'Wrong code' });
+  } else {
+    setUI({ entry: e, suError: '' });
+  }
+}
+function backspacePin() { setUI(function (s) { return { entry: s.entry.slice(0, -1) }; }); }
+
+function addJobFn() {
+  setD(function (x) {
+    x.jobs = x.jobs.concat([{ id: uid(), name: 'New job', rate: 0, cycle: 'weekly', color: JC[x.jobs.length % JC.length], taxMode: 'paye', taxPct: 20, cutoffDays: 0 }]);
+    return x;
+  });
+}
+function removeJobFn(id) {
+  setD(function (x) { x.jobs = x.jobs.filter(function (j) { return j.id !== id; }); x.shifts = x.shifts.filter(function (s) { return s.jobId !== id; }); return x; });
+  setUI({ confirmJob: null });
+}
+function wipeFn() {
+  D = blank();
+  saveData();
+  try { sessionStorage.removeItem(LS_KEY + '-open'); } catch (e) {}
+  UI = Object.assign({}, UI, {
+    unlocked: true, entry: '', confirmWipe: false, tab: 'home', sheet: null,
+    su: { name: '', j1n: '', j1r: '', j1c: 'weekly', j1t: 'hour', j2t: 'hour', j2on: false, j2n: '', j2r: '', j2c: 'weekly', pin: '', pin2: '' }
+  });
+  render();
+}
+
+function jobById(id) { return D.jobs.find(function (j) { return j.id === id; }) || D.jobs[0]; }
+function shiftHoursFn(s) {
+  var a = s.start.split(':').map(Number), b = s.end.split(':').map(Number);
+  var m = (b[0] * 60 + b[1]) - (a[0] * 60 + a[1]);
+  if (m <= 0) m += 1440;
+  m -= (s.brk || 0);
+  var h = Math.max(0, m / 60);
+  if (ROUND_QUARTER) h = Math.round(h * 4) / 4;
+  return h;
+}
+function nextPayday(j, today) {
+  var cycle = j.cycle || 'monthly';
+  var anchor = j.payAnchor ? parseKey(j.payAnchor) : null;
+  var step = cycle === 'fortnightly' ? 14 : cycle === 'fourweekly' ? 28 : Math.max(1, Number(j.customDays) || 28);
+  for (var i = 0; i < 80; i++) {
+    var dt = addDays(today, i);
+    var din = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+    var hit = false;
+    if (cycle === 'weekly') hit = dt.getDay() === 5;
+    else if (cycle === 'monthly') hit = dt.getDate() === Math.min(Number(j.payDay) || 28, din);
+    else if (anchor) {
+      var diff = Math.round((dt - anchor) / 86400000);
+      hit = ((diff % step) + step) % step === 0;
+    }
+    if (hit) return { i: i, dt: dt };
+  }
+  return null;
+}
+function shiftGrossFn(s, j) {
+  var jb = j || jobById(s.jobId);
+  return (jb.payType === 'day') ? (Number(jb.rate) || 0) : shiftHoursFn(s) * jb.rate;
+}
+function grossByJob(shifts) {
+  var out = {};
+  D.jobs.forEach(function (j) { out[j.id] = { hours: 0, gross: 0 }; });
+  shifts.forEach(function (s) {
+    var j = jobById(s.jobId); if (!out[j.id]) out[j.id] = { hours: 0, gross: 0 };
+    var h = shiftHoursFn(s);
+    out[j.id].hours += h; out[j.id].gross += shiftGrossFn(s, j);
+  });
+  return out;
+}
+function deductWeek(byJob) {
+  var grosses = Object.keys(byJob).map(function (k) { return byJob[k].gross; });
+  var g = grosses.reduce(function (a, b) { return a + b; }, 0);
+  if (D.flat) {
+    var t = g * (Math.max(0, Math.min(100, Number(D.flatPct) || 0)) / 100);
+    return { gross: g, tax: t, ni: 0, net: g - t };
+  }
+  var it = 0, ni = 0;
+  var paye = [];
+  Object.keys(byJob).forEach(function (k) {
+    var j = jobById(k), gr = byJob[k].gross, mode = (j && j.taxMode) || 'paye';
+    if (mode === 'none' || gr <= 0) return;
+    if (mode === 'flat') { it += gr * (Math.max(0, Math.min(100, Number(j.taxPct) || 0)) / 100); return; }
+    paye.push(gr);
+  });
+  var pg = paye.reduce(function (a, b) { return a + b; }, 0);
+  if (pg > wPA) {
+    it += Math.min(pg - wPA, wBASIC - wPA) * 0.2;
+    if (pg > wBASIC) it += Math.min(pg - wBASIC, wHIGHER - wBASIC) * 0.4;
+    if (pg > wHIGHER) it += (pg - wHIGHER) * 0.45;
+  }
+  paye.forEach(function (x) {
+    if (x > NI_PT) ni += (Math.min(x, NI_UEL) - NI_PT) * 0.08;
+    if (x > NI_UEL) ni += (x - NI_UEL) * 0.02;
+  });
+  return { gross: g, tax: it, ni: ni, net: g - it - ni };
+}
+function weekShifts(mon) {
+  var a = dateKey(mon), b = dateKey(addDays(mon, 6));
+  return D.shifts.filter(function (s) { return s.date >= a && s.date <= b; });
+}
+function monthNetFn(monthKey) {
+  var weeks = {};
+  D.shifts.forEach(function (s) { var w = dateKey(monday(parseKey(s.date))); (weeks[w] = weeks[w] || []).push(s); });
+  var gross = 0, tax = 0, hours = 0;
+  Object.keys(weeks).forEach(function (w) {
+    var list = weeks[w];
+    var tot = deductWeek(grossByJob(list));
+    if (tot.gross <= 0) return;
+    var rate = tot.tax / tot.gross + (tot.ni || 0) / tot.gross;
+    list.forEach(function (s) {
+      if (s.date.slice(0, 7) !== monthKey) return;
+      var j = jobById(s.jobId), h = shiftHoursFn(s), g = shiftGrossFn(s, j);
+      gross += g; hours += h; tax += g * rate;
+    });
+  });
+  return { gross: gross, tax: tax, net: gross - tax, hours: hours };
+}
+function billsFor(monthDate, today) {
+  var daysIn = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  var isCur = monthDate.getFullYear() === today.getFullYear() && monthDate.getMonth() === today.getMonth();
+  return D.bills.filter(function (b) { return !isCur || Math.min(b.day, daysIn) <= today.getDate(); });
+}
+function openShiftSheet(dateK, shift) {
+  var j0 = D.jobs[0] || { id: '' };
+  setUI({
+    sheet: 'shift',
+    form: shift
+      ? { id: shift.id, date: shift.date, jobId: shift.jobId, start: shift.start, end: shift.end, brk: shift.brk || 0 }
+      : { date: dateK, jobId: j0.id, start: '09:00', end: '17:00', brk: DEFAULT_BREAK_MINS }
+  });
+}
+
+/* ---------- ICS export ---------- */
+function icsDay(dt) { return dt.getFullYear() + pad(dt.getMonth() + 1) + pad(dt.getDate()); }
+function icsEsc(t) { return String(t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n'); }
+function buildIcs() {
+  var d = D;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  var lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Shift Pay Tracker//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Bills & paydays'];
+  var n = 0;
+  var ev = function (id, dt, summary, desc, alarm) {
+    n++;
+    lines.push('BEGIN:VEVENT', 'UID:' + id + '@shiftpaytracker', 'DTSTAMP:' + stamp,
+      'DTSTART;VALUE=DATE:' + icsDay(dt), 'DTEND;VALUE=DATE:' + icsDay(addDays(dt, 1)),
+      'SUMMARY:' + icsEsc(summary), 'DESCRIPTION:' + icsEsc(desc), 'TRANSP:TRANSPARENT',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:-PT15H', 'DESCRIPTION:' + icsEsc(alarm), 'END:VALARM', 'END:VEVENT');
+  };
+  for (var m = 0; m < 6; m++) {
+    var base = new Date(today.getFullYear(), today.getMonth() + m, 1);
+    var din = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    (d.bills || []).forEach(function (b) {
+      var dt = new Date(base.getFullYear(), base.getMonth(), Math.min(Number(b.day) || 1, din));
+      if (dt < today) return;
+      var amt = money(b.amount, 0);
+      ev('bill-' + b.id + '-' + icsDay(dt), dt, b.name + ' ' + amt + ' due', b.cat + ' \u00b7 from your pay tracker', b.name + ' ' + amt + ' leaves tomorrow');
+    });
+  }
+  var limit = addDays(today, 184);
+  (d.jobs || []).forEach(function (j) {
+    var cursor = today;
+    for (var k = 0; k < 30; k++) {
+      var p = nextPayday(j, cursor);
+      if (!p || p.dt > limit) break;
+      ev('pay-' + j.id + '-' + icsDay(p.dt), p.dt, j.name + ' payday', 'Pay expected from ' + j.name, j.name + ' payday tomorrow');
+      cursor = addDays(p.dt, 1);
+    }
+  });
+  lines.push('END:VCALENDAR');
+  return { text: lines.join('\r\n'), count: n };
+}
+function exportIcsFn() {
+  var built = buildIcs();
+  if (!built.count) { setUI({ icsMsg: 'Nothing to add yet \u2014 add a bill or a job first.' }); return; }
+  var file = new File([built.text], 'bills-and-paydays.ics', { type: 'text/calendar' });
+  var done = function () { setUI({ icsMsg: built.count + ' dates ready \u2014 choose Calendar to add them.' }); };
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: 'Bills & paydays' }).then(done).catch(function () {});
+    return;
+  }
+  var url = URL.createObjectURL(new Blob([built.text], { type: 'text/calendar' }));
+  var a = document.createElement('a');
+  a.href = url; a.download = 'bills-and-paydays.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  setUI({ icsMsg: built.count + ' dates downloaded \u2014 open the file to add them to Calendar.' });
+}
+
+/* ---------- compute view values ---------- */
+function computeVals() {
+  var d = D, S = UI;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var tKey = dateKey(today);
+  var mon = addDays(monday(today), S.weekOffset * 7);
+  var wShifts = weekShifts(mon);
+  var byJob = grossByJob(wShifts);
+  var tot = deductWeek(byJob);
+  var wHours = Object.keys(byJob).reduce(function (a, k) { return a + byJob[k].hours; }, 0);
+  var thisMonthKey = mKey(today);
+  var mn = monthNetFn(thisMonthKey);
+
+  var maxDayH = Math.max(8, Math.max.apply(null, DOW.map(function (_, i) {
+    var dk = dateKey(addDays(mon, i));
+    return wShifts.filter(function (s) { return s.date === dk; }).reduce(function (a, s) { return a + shiftHoursFn(s); }, 0);
+  })));
+  var firstJobId = (d.jobs[0] || {}).id;
+  var weekDays = DOW.map(function (dow, i) {
+    var dk = dateKey(addDays(mon, i));
+    var list = wShifts.filter(function (s) { return s.date === dk; });
+    var h1 = list.filter(function (s) { return s.jobId === firstJobId; }).reduce(function (a, s) { return a + shiftHoursFn(s); }, 0);
+    var h2 = list.filter(function (s) { return s.jobId !== firstJobId; }).reduce(function (a, s) { return a + shiftHoursFn(s); }, 0);
+    var px = function (h) { return (h / maxDayH) * 58; };
+    var tot2 = h1 + h2;
+    return {
+      dow: dow[0], h1: px(h1) + 'px', h2: px(h2) + 'px',
+      hEmpty: tot2 > 0 ? '0px' : '4px',
+      radius: h2 > 0 ? '0' : '5px 5px 0 0',
+      labelColor: dk === tKey ? 'var(--accent, #F73F5C)' : 'var(--dim, #9AA0B2)'
+    };
+  });
+
+  var dayRows = DOW.map(function (dow, i) {
+    var dt = addDays(mon, i), dk = dateKey(dt);
+    var list = wShifts.filter(function (s) { return s.date === dk; });
+    return {
+      dow: dow.toUpperCase(), dom: dt.getDate(),
+      bg: dk === tKey ? 'var(--todayBg, #FFF1F4)' : 'var(--card, #FFFFFF)',
+      border: dk === tKey ? 'var(--todayBorder, #FFC8D2)' : 'var(--card, #FFFFFF)',
+      numColor: dk === tKey ? 'var(--accent, #F73F5C)' : 'var(--text, #1E2230)',
+      empty: list.length === 0,
+      add: function () { openShiftSheet(dk, null); },
+      shifts: list.map(function (s) {
+        var j = jobById(s.jobId), h = shiftHoursFn(s);
+        return {
+          jobName: j.name, color: j.color, times: s.start + ' \u2013 ' + s.end + (s.brk ? ' \u00b7 ' + s.brk + 'm break' : ''),
+          hours: hrs(h), pay: money(shiftGrossFn(s, j)),
+          edit: function () { openShiftSheet(dk, s); }
+        };
+      })
+    };
+  });
+
+  var calBase = new Date(today.getFullYear(), today.getMonth() + S.calOffset, 1);
+  var calMK = mKey(calBase);
+  var daysIn = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 0).getDate();
+  var lead = (calBase.getDay() + 6) % 7;
+  var billsOn = function (day) { return d.bills.filter(function (b) { return Math.min(b.day, daysIn) === day; }); };
+  var isPaid = function (b) { return !!(d.paid[calMK] || {})[b.id]; };
+  var cells = [];
+  for (var i = 0; i < lead; i++) cells.push({ dom: '', bg: 'transparent', border: 'transparent', color: 'transparent', weight: '400', dots: [], select: function () {} });
+  var _loop = function (n) {
+    var dk = calBase.getFullYear() + '-' + pad(calBase.getMonth() + 1) + '-' + pad(n);
+    var bs = billsOn(n);
+    var sel = S.selDay === n;
+    cells.push({
+      dom: n, dots: bs.slice(0, 3).map(function (b) { return catColor(b.cat); }),
+      bg: sel ? '#F73F5C' : (dk === tKey ? 'var(--todayBg, #FFF1F4)' : 'transparent'),
+      border: sel ? 'var(--accent, #F73F5C)' : (dk === tKey ? 'var(--todayBorder, #FFC8D2)' : 'transparent'),
+      color: bs.length ? 'var(--text, #1E2230)' : 'var(--mut, #7A8095)',
+      weight: dk === tKey || sel ? '700' : '500',
+      select: function () { setUI({ selDay: sel ? null : n }); }
+    });
+  };
+  for (var n = 1; n <= daysIn; n++) _loop(n);
+  var listBills = (S.selDay ? billsOn(S.selDay) : d.bills.slice().sort(function (a, b) { return a.day - b.day; }));
+  var billsTotal = d.bills.reduce(function (a, b) { return a + b.amount; }, 0);
+  var unpaidNow = d.bills.filter(function (b) { return !isPaid(b) && (S.calOffset !== 0 || Math.min(b.day, daysIn) >= today.getDate()); });
+  var billsUnpaid = unpaidNow.reduce(function (a, b) { return a + b.amount; }, 0);
+
+  var upcoming = [];
+  for (var ui = 0; ui < 62 && upcoming.length < 4; ui++) {
+    var dt2 = addDays(today, ui);
+    var din2 = new Date(dt2.getFullYear(), dt2.getMonth() + 1, 0).getDate();
+    d.bills.forEach(function (b) {
+      if (Math.min(b.day, din2) !== dt2.getDate()) return;
+      if (((d.paid[mKey(dt2)] || {})[b.id])) return;
+      if (upcoming.length < 4) upcoming.push({
+        name: b.name, amount: money(b.amount), day: dt2.getDate(), mon: MON[dt2.getMonth()],
+        away: ui === 0 ? 'Today' : ui === 1 ? 'Tomorrow' : 'in ' + ui + ' days'
+      });
+    });
+  }
+
+  var payWhen = '\u2014', payJob = '', payCutoff = '';
+  var best = null;
+  d.jobs.forEach(function (j) {
+    var np = nextPayday(j, today);
+    if (np && (!best || np.i < best.i)) best = { i: np.i, j: j, dt: np.dt };
+  });
+  if (best) {
+    payWhen = best.i === 0 ? 'Today' : best.i === 1 ? 'Tomorrow' : DOW[(best.dt.getDay() + 6) % 7] + ' ' + best.dt.getDate();
+    payJob = best.j.name + ' \u00b7 ' + CYCLE_LABEL[best.j.cycle || 'monthly'];
+    var cd = Number(best.j.cutoffDays) || 0;
+    if (cd > 0) {
+      var co = addDays(best.dt, -cd);
+      payCutoff = 'Covers hours up to ' + co.getDate() + ' ' + MON[co.getMonth()];
+    }
+  }
+
+  var catTotals = {};
+  CATS.forEach(function (c) { catTotals[c.name] = 0; });
+  billsFor(today, today).forEach(function (b) { catTotals[b.cat] = (catTotals[b.cat] || 0) + b.amount; });
+  d.spends.forEach(function (s) { if (s.date.slice(0, 7) === thisMonthKey) catTotals[s.cat] = (catTotals[s.cat] || 0) + s.amount; });
+  var catMax = Math.max(1, Math.max.apply(null, Object.keys(catTotals).map(function (k) { return catTotals[k]; })));
+  var catBars = Object.keys(catTotals).filter(function (k) { return catTotals[k] > 0; }).sort(function (a, b) { return catTotals[b] - catTotals[a]; })
+    .map(function (k) { return { name: k, amount: money(catTotals[k]), pct: (catTotals[k] / catMax * 100).toFixed(1) + '%', color: catColor(k) }; });
+  var monthSpendTot = Object.keys(catTotals).reduce(function (a, k) { return a + catTotals[k]; }, 0);
+  var billsSoFar = billsFor(today, today).reduce(function (a, b) { return a + b.amount; }, 0);
+  var loggedSoFar = d.spends.filter(function (s) { return s.date.slice(0, 7) === thisMonthKey; }).reduce(function (a, s) { return a + s.amount; }, 0);
+
+  var flow = [];
+  var firstShift = d.shifts.reduce(function (a, s) { return (!a || s.date < a) ? s.date : a; }, null);
+  var firstMK = firstShift ? firstShift.slice(0, 7) : thisMonthKey;
+  for (var fi = 5; fi >= 0; fi--) {
+    var fdt = new Date(today.getFullYear(), today.getMonth() - fi, 1);
+    var mk = mKey(fdt);
+    if (mk < firstMK) continue;
+    var inn = monthNetFn(mk).net;
+    var out = billsFor(fdt, today).reduce(function (a, b) { return a + b.amount; }, 0);
+    d.spends.forEach(function (s) { if (s.date.slice(0, 7) === mk) out += s.amount; });
+    flow.push({ mk: mk, label: MON[fdt.getMonth()] + (fi === 0 ? '*' : ''), inn: inn, out: out, isNow: fi === 0 });
+  }
+  var flowMax = Math.max(1, Math.max.apply(null, flow.map(function (f) { return Math.max(f.inn, f.out); })));
+  var flowBars = flow.map(function (f) {
+    return {
+      label: f.label, inH: (f.inn / flowMax * 130).toFixed(0) + 'px', outH: (f.out / flowMax * 130).toFixed(0) + 'px',
+      labelColor: f.isNow ? 'var(--accent, #F73F5C)' : 'var(--dim, #9AA0B2)'
+    };
+  });
+  var flowNow = flow[flow.length - 1];
+  var flowDiff = flowNow.inn - flowNow.out;
+
+  var spendList = d.spends.filter(function (s) { return s.date.slice(0, 7) === thisMonthKey; }).sort(function (a, b) { return b.date.localeCompare(a.date); })
+    .map(function (s) {
+      var dt3 = parseKey(s.date);
+      return {
+        name: s.note || s.cat, color: catColor(s.cat), amount: money(s.amount),
+        sub: s.cat + ' \u00b7 ' + dt3.getDate() + ' ' + MON[dt3.getMonth()],
+        remove: function () { setD(function (x) { x.spends = x.spends.filter(function (y) { return y.id !== s.id; }); return x; }); }
+      };
+    });
+
+  var f = S.form;
+  var fj = f.jobId ? jobById(f.jobId) : d.jobs[0];
+  var fh = f.start && f.end ? shiftHoursFn({ start: f.start, end: f.end, brk: f.brk || 0 }) : 0;
+  var overnight = f.start && f.end && (f.end <= f.start);
+
+  var titles = { home: ['', 'Monthly Overview'], hours: ['Hours', 'Shifts & pay'], exp: ['Spending', 'Where it goes'], bills: ['Bills', 'What comes out'] };
+  var t = titles[S.tab];
+  var uname = (d.user && d.user.name) ? d.user.name : '';
+  var su = S.su;
+
+  return {
+    isSetup: !d.setup,
+    isLocked: !!d.setup && !!d.pin && !S.unlocked,
+    suName: su.name, suJ1n: su.j1n, suJ1r: su.j1r, suJ1c: su.j1c,
+    suJ1Label: (su.j1t || 'hour') === 'day' ? '\u00a3 per day' : '\u00a3 per hour',
+    suJ2Label2: (su.j2t || 'hour') === 'day' ? '\u00a3 per day' : '\u00a3 per hour',
+    suJ1Pay: [{ id: 'hour', label: 'Per hour' }, { id: 'day', label: 'Day rate' }].map(function (o) {
+      return {
+        label: o.label,
+        bg: (su.j1t || 'hour') === o.id ? 'var(--accent, #F73F5C)' : 'transparent',
+        color: (su.j1t || 'hour') === o.id ? 'var(--onAccent, #FFFFFF)' : 'var(--mut2, #8A90A3)',
+        pick: function () { suSet('j1t', o.id); }
+      };
+    }),
+    suJ2Pay: [{ id: 'hour', label: 'Per hour' }, { id: 'day', label: 'Day rate' }].map(function (o) {
+      return {
+        label: o.label,
+        bg: (su.j2t || 'hour') === o.id ? 'var(--accent, #F73F5C)' : 'transparent',
+        color: (su.j2t || 'hour') === o.id ? 'var(--onAccent, #FFFFFF)' : 'var(--mut2, #8A90A3)',
+        pick: function () { suSet('j2t', o.id); }
+      };
+    }),
+    suJ2on: su.j2on, suJ2n: su.j2n, suJ2r: su.j2r, suJ2c: su.j2c,
+    suPin: su.pin, suPin2: su.pin2, suError: S.suError, hasSuError: !!S.suError,
+    setSuName: function (e) { suSet('name', e.target.value); },
+    setSuJ1n: function (e) { suSet('j1n', e.target.value); },
+    setSuJ1r: function (e) { suSet('j1r', e.target.value); },
+    setSuJ1c: function (e) { suSet('j1c', e.target.value); },
+    setSuJ2n: function (e) { suSet('j2n', e.target.value); },
+    setSuJ2r: function (e) { suSet('j2r', e.target.value); },
+    setSuJ2c: function (e) { suSet('j2c', e.target.value); },
+    setSuPin: function (e) { suSet('pin', e.target.value.replace(/\D/g, '').slice(0, 4)); },
+    setSuPin2: function (e) { suSet('pin2', e.target.value.replace(/\D/g, '').slice(0, 4)); },
+    toggleSuJ2: function () { suSet('j2on', !su.j2on); },
+    suJ2Label: su.j2on ? 'Remove second job' : '+ Add a second job',
+    finishSetup: function () { finishSetup(); },
+    lockGreeting: uname ? 'Hi ' + uname : 'Welcome back',
+    forgotLabel: S.confirmWipe ? 'Tap again to erase everything on this phone' : 'Forgot your code?',
+    forgotColor: S.confirmWipe ? 'var(--clay, #E8503A)' : 'var(--dim, #9AA0B2)',
+    pinDots: [0, 1, 2, 3].map(function (i) { return { bg: S.entry.length > i ? 'var(--accent, #F73F5C)' : 'transparent', border: S.entry.length > i ? 'var(--accent, #F73F5C)' : 'var(--circle, #CFCCD8)' }; }),
+    pinKeys: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '\u232b'].map(function (k) {
+      return {
+        label: k, shown: k === '' ? 'hidden' : 'visible',
+        tap: function () { if (k === '\u232b') backspacePin(); else if (k) tapPin(k); }
+      };
+    }),
+    isHome: S.tab === 'home', isHours: S.tab === 'hours', isExp: S.tab === 'exp', isBills: S.tab === 'bills',
+    headerKicker: t[0], headerTitle: t[1],
+    tabs: [
+      { id: 'home', label: 'Home', icon: '\u25c9' }, { id: 'hours', label: 'Hours', icon: '\u25f7' },
+      { id: 'exp', label: 'Spending', icon: '\u25f1' }, { id: 'bills', label: 'Bills', icon: '\u25a4' }
+    ].map(function (x) { return { label: x.label, icon: x.icon, bg: S.tab === x.id ? 'var(--accent, #F73F5C)' : 'transparent', color: S.tab === x.id ? '#FFFFFF' : 'rgba(255,255,255,.55)', go: function () { setUI({ tab: x.id }); } }; }),
+
+    monthName: MONL[today.getMonth()],
+    monthNet: money(mn.net, 0), monthGross: money(mn.gross, 0), monthTax: money(mn.tax, 0),
+    monthHours: hrs(mn.hours), monthPerHour: mn.hours ? money(mn.net / mn.hours) : '\u00a30',
+
+    weekLabel: mon.getDate() + ' ' + MON[mon.getMonth()] + ' \u2013 ' + addDays(mon, 6).getDate() + ' ' + MON[addDays(mon, 6).getMonth()] + (S.weekOffset === 0 ? '  (this week)' : ''),
+    weekDays: weekDays, weekHours: hrs(wHours), weekGross: money(tot.gross), weekNet: money(tot.net),
+    weekDeductions: money(tot.tax + (tot.ni || 0)),
+    jobRows: d.jobs.map(function (j) {
+      return {
+        name: j.name, color: j.color, rate: money(j.rate) + (j.payType === 'day' ? '/day' : '/hr'),
+        hours: hrs(byJob[j.id] ? byJob[j.id].hours : 0), gross: money(byJob[j.id] ? byJob[j.id].gross : 0)
+      };
+    }),
+    taxNote: d.flat
+      ? 'Using your own ' + d.flatPct + '% deduction on everything. Change it in settings.'
+      : d.jobs.some(function (j) { return (j.taxMode || 'paye') !== 'paye'; })
+      ? d.jobs.map(function (j) { return j.name + ': ' + ((j.taxMode || 'paye') === 'flat' ? (j.taxPct || 0) + '% flat' : (j.taxMode === 'none' ? 'no deductions' : 'PAYE + NI')); }).join(' \u00b7 ') + '. Change any of it in settings.'
+      : 'Estimate on 2026/27 UK rates: \u00a312,570 tax-free, 20% above it, and 8% National Insurance on anything over \u00a3242 a week \u2014 worked out per job, which is why a small second job often pays no NI.',
+    dayRows: dayRows,
+
+    prevWeek: function () { setUI(function (s) { return { weekOffset: s.weekOffset - 1 }; }); },
+    nextWeek: function () { setUI(function (s) { return { weekOffset: s.weekOffset + 1 }; }); },
+    goHours: function () { setUI({ tab: 'hours' }); },
+    goBills: function () { setUI({ tab: 'bills' }); },
+
+    upcomingBills: upcoming,
+    leftAfterBills: money(mn.net - billsUnpaid, 0),
+    leftColor: mn.net - billsUnpaid < 0 ? 'var(--clay, #E8503A)' : 'var(--text, #1E2230)',
+    billsLeftLabel: money(billsUnpaid, 0) + ' still due',
+    nextPayWhen: payWhen, nextPayJob: payJob, nextPayCutoff: payCutoff, hasCutoff: !!payCutoff,
+
+    exportIcs: function () { exportIcsFn(); },
+    icsMsg: S.icsMsg || '', hasIcsMsg: !!S.icsMsg,
+
+    chartIsCat: S.chart === 'cat', chartIsFlow: S.chart === 'flow',
+    setChartCat: function () { setUI({ chart: 'cat' }); }, setChartFlow: function () { setUI({ chart: 'flow' }); },
+    catTabBg: S.chart === 'cat' ? 'var(--card2, #F2F0F7)' : 'transparent', catTabColor: S.chart === 'cat' ? 'var(--text, #1E2230)' : 'var(--mut2, #8A90A3)',
+    flowTabBg: S.chart === 'flow' ? 'var(--card2, #F2F0F7)' : 'transparent', flowTabColor: S.chart === 'flow' ? 'var(--text, #1E2230)' : 'var(--mut2, #8A90A3)',
+    monthSpend: money(monthSpendTot, 0), catBars: catBars,
+    spendSplit: money(billsSoFar, 0) + ' bills \u00b7 ' + money(loggedSoFar, 0) + ' logged by you',
+    spendVsPay: mn.net ? (monthSpendTot / mn.net * 100).toFixed(0) + '% of take-home so far' : '',
+    flowBars: flowBars, flowSummaryLabel: MONL[today.getMonth()] + ' so far (' + (flowDiff >= 0 ? 'left over' : 'short') + ')',
+    flowSummary: (flowDiff >= 0 ? '+' : '\u2212') + money(flowDiff, 0),
+    flowSummaryColor: flowDiff >= 0 ? 'var(--accent, #F73F5C)' : 'var(--clay, #E8503A)',
+    spendList: spendList, noSpends: spendList.length === 0,
+    noFixed: d.bills.length === 0, noCatBars: catBars.length === 0, noFlow: flow.length === 0,
+    noUpcoming: upcoming.length === 0, noShiftsYet: d.shifts.length === 0,
+    userName: uname,
+    setUserName: function (e) { var v = e.target.value; setD(function (x) { x.user = Object.assign({}, x.user || {}, { name: v }); return x; }); },
+    pinEdit: S.pinEdit, hasPin: !!d.pin,
+    setPinEdit: function (e) { var v = e.target.value.replace(/\D/g, '').slice(0, 4); setUI({ pinEdit: v }); },
+    pinStatus: d.pin ? 'A code is on. Type a new one to change it, or turn it off.' : 'No code set. Type 4 digits to lock the app.',
+    savePin: function () { var v = S.pinEdit; if (v.length !== 4) return; setD(function (x) { x.pin = v; return x; }); setUI({ pinEdit: '' }); },
+    removePin: function () { setD(function (x) { x.pin = null; return x; }); setUI({ pinEdit: '' }); },
+    wipeLabel: S.confirmWipe ? 'Tap again to erase everything' : 'Clear all data and start again',
+    wipeTap: function () { if (S.confirmWipe) wipeFn(); else setUI({ confirmWipe: true }); },
+    fixedTotal: money(d.bills.reduce(function (a, b) { return a + b.amount; }, 0), 0),
+    fixedList: d.bills.slice().sort(function (a, b) { return a.day - b.day; }).map(function (b) {
+      return {
+        name: b.name, amount: money(b.amount), color: catColor(b.cat),
+        sub: b.cat + ' \u00b7 ' + b.day + ord(b.day) + ' of the month',
+        edit: function () { setUI({ sheet: 'bill', form: { id: b.id, name: b.name, amount: b.amount, day: b.day, cat: b.cat } }); },
+        remove: function () { setD(function (x) { x.bills = x.bills.filter(function (y) { return y.id !== b.id; }); return x; }); }
+      };
+    }),
+
+    calMonthLabel: MONL[calBase.getMonth()] + ' ' + calBase.getFullYear(),
+    dowLabels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'], calCells: cells,
+    prevMonth: function () { setUI(function (s) { return { calOffset: s.calOffset - 1, selDay: null }; }); },
+    nextMonth: function () { setUI(function (s) { return { calOffset: s.calOffset + 1, selDay: null }; }); },
+    billsTotal: money(billsTotal, 0), billsUnpaid: money(billsUnpaid, 0),
+    billListTitle: S.selDay ? MON[calBase.getMonth()] + ' ' + S.selDay : 'Every month',
+    billList: listBills.map(function (b) {
+      var p = isPaid(b);
+      return {
+        name: b.name, amount: money(b.amount), sub: (p ? 'Paid \u00b7 ' : 'Due ') + Math.min(b.day, daysIn) + (p ? '' : ord(Math.min(b.day, daysIn))) + ' \u00b7 ' + b.cat,
+        check: p ? '\u2713' : '', checkBg: p ? 'var(--accent, #F73F5C)' : 'transparent', checkBorder: p ? 'var(--accent, #F73F5C)' : 'var(--circle, #CFCCD8)',
+        strike: p ? 'line-through' : 'none', nameColor: p ? 'var(--dim, #9AA0B2)' : 'var(--text, #1E2230)',
+        edit: function () { setUI({ sheet: 'bill', form: { id: b.id, name: b.name, amount: b.amount, day: b.day, cat: b.cat } }); },
+        togglePaid: function () {
+          setD(function (x) {
+            var mm = Object.assign({}, (x.paid[calMK] || {}));
+            if (mm[b.id]) delete mm[b.id]; else mm[b.id] = true;
+            x.paid = Object.assign({}, x.paid); x.paid[calMK] = mm;
+            return x;
+          });
+        },
+        remove: function () { setD(function (x) { x.bills = x.bills.filter(function (y) { return y.id !== b.id; }); return x; }); }
+      };
+    }),
+
+    sheetOpen: !!S.sheet, closeSheet: function () { setUI({ sheet: null, drag: 0 }); },
+    sheetShift: S.drag ? 'translateY(' + S.drag + 'px)' : 'none',
+    sheetEase: S.dragging ? 'none' : 'transform .22s cubic-bezier(.22,1,.36,1)',
+    sheetIsShift: S.sheet === 'shift', sheetIsSpend: S.sheet === 'spend', sheetIsBill: S.sheet === 'bill', sheetIsSettings: S.sheet === 'settings',
+    openSettings: function () { setUI({ sheet: 'settings' }); },
+    openSpend: function () { setUI({ sheet: 'spend', form: { cat: 'Food', amount: '', note: '' } }); },
+    openBill: function () { setUI({ sheet: 'bill', form: { cat: 'Bills', amount: '', name: '', day: '' } }); },
+    billSheetTitle: f.id ? 'Edit fixed cost' : 'Add a fixed cost',
+    isEditingBill: !!f.id,
+    deleteBill: function () {
+      var id = S.form.id;
+      setD(function (x) { x.bills = x.bills.filter(function (b) { return b.id !== id; }); return x; });
+      setUI({ sheet: null });
+    },
+
+    shiftSheetTitle: f.id ? 'Edit shift' : 'Add a shift',
+    shiftSheetDate: f.date ? DOW[(parseKey(f.date).getDay() + 6) % 7] + ' ' + parseKey(f.date).getDate() + ' ' + MON[parseKey(f.date).getMonth()] : '',
+    jobPicker: d.jobs.map(function (j) {
+      return {
+        name: j.name,
+        bg: f.jobId === j.id ? '#F73F5C' : 'var(--card, #FFFFFF)', color: f.jobId === j.id ? '#FFFFFF' : 'var(--mut, #7A8095)',
+        border: f.jobId === j.id ? 'var(--accent, #F73F5C)' : 'var(--card2, #F2F0F7)',
+        pick: function () { setUI(function (s) { return { form: Object.assign({}, s.form, { jobId: j.id }) }; }); }
+      };
+    }),
+    formStart: f.start || '', formEnd: f.end || '',
+    setStart: function (e) { var v = e.target.value; setUI(function (s) { return { form: Object.assign({}, s.form, { start: v }) }; }); },
+    setEnd: function (e) { var v = e.target.value; setUI(function (s) { return { form: Object.assign({}, s.form, { end: v }) }; }); },
+    formBreak: (f.brk || 0) + ' min',
+    breakDown: function () { setUI(function (s) { return { form: Object.assign({}, s.form, { brk: Math.max(0, (s.form.brk || 0) - 15) }) }; }); },
+    breakUp: function () { setUI(function (s) { return { form: Object.assign({}, s.form, { brk: (s.form.brk || 0) + 15 }) }; }); },
+    formHours: hrs(fh), formPay: money(fj ? (fj.payType === 'day' ? (Number(fj.rate) || 0) : fh * fj.rate) : 0),
+    formOvernight: overnight ? 'overnight shift' : 'paid hours',
+    isEditingShift: !!f.id,
+    saveShift: function () {
+      var g = Object.assign({}, S.form);
+      setD(function (x) {
+        var rest = x.shifts.filter(function (s) { return s.id !== g.id; });
+        rest.push({ id: g.id || uid(), jobId: g.jobId, date: g.date, start: g.start, end: g.end, brk: g.brk || 0 });
+        x.shifts = rest;
+        return x;
+      });
+      setUI({ sheet: null });
+    },
+    deleteShift: function () {
+      var id = S.form.id;
+      setD(function (x) { x.shifts = x.shifts.filter(function (s) { return s.id !== id; }); return x; });
+      setUI({ sheet: null });
+    },
+
+    catPicker: CATS.map(function (c) {
+      return {
+        name: c.name,
+        bg: f.cat === c.name ? '#F73F5C' : 'var(--card, #FFFFFF)', color: f.cat === c.name ? '#FFFFFF' : 'var(--mut, #7A8095)',
+        border: f.cat === c.name ? 'var(--accent, #F73F5C)' : 'var(--card2, #F2F0F7)',
+        pick: function () { setUI(function (s) { return { form: Object.assign({}, s.form, { cat: c.name }) }; }); }
+      };
+    }),
+    formAmount: f.amount === undefined ? '' : f.amount,
+    formNote: f.note || '', formName: f.name || '', formDay: f.day === undefined ? '' : f.day,
+    setAmount: function (e) { var v = e.target.value; setUI(function (s) { return { form: Object.assign({}, s.form, { amount: v }) }; }); },
+    setNote: function (e) { var v = e.target.value; setUI(function (s) { return { form: Object.assign({}, s.form, { note: v }) }; }); },
+    setName: function (e) { var v = e.target.value; setUI(function (s) { return { form: Object.assign({}, s.form, { name: v }) }; }); },
+    setDay: function (e) { var v = e.target.value; setUI(function (s) { return { form: Object.assign({}, s.form, { day: v }) }; }); },
+    saveSpend: function () {
+      var g = S.form, amt = Number(g.amount);
+      if (!amt) { setUI({ sheet: null }); return; }
+      setD(function (x) { x.spends = x.spends.concat([{ id: uid(), date: tKey, cat: g.cat || 'Other', amount: amt, note: g.note || '' }]); return x; });
+      setUI({ sheet: null });
+    },
+    saveBill: function () {
+      var g = S.form, amt = Number(g.amount), day = Math.max(1, Math.min(31, Number(g.day) || 1));
+      if (!amt || !g.name) { setUI({ sheet: null }); return; }
+      setD(function (x) {
+        var rest = x.bills.filter(function (b) { return b.id !== g.id; });
+        rest.push({ id: g.id || uid(), name: g.name, amount: amt, day: day, cat: g.cat || 'Bills' });
+        x.bills = rest;
+        return x;
+      });
+      setUI({ sheet: null });
+    },
+
+    jobEditors: d.jobs.map(function (j, i) {
+      return {
+        id: j.id, name: j.name, rate: j.rate, cycle: j.cycle, color: j.color,
+        rateLabel: j.payType === 'day' ? '\u00a3 per day' : '\u00a3 per hour',
+        payOptions: [{ id: 'hour', label: 'Per hour' }, { id: 'day', label: 'Day rate' }].map(function (o) {
+          var on = (j.payType || 'hour') === o.id;
+          return {
+            label: o.label,
+            bg: on ? 'var(--accent, #F73F5C)' : 'transparent',
+            color: on ? 'var(--onAccent, #FFFFFF)' : 'var(--mut2, #8A90A3)',
+            pick: function () { setD(function (x) { x.jobs[i].payType = o.id; return x; }); }
+          };
+        }),
+        payNote: j.payType === 'day' ? 'Each shift you log pays one day rate, whatever the hours.' : 'Pay is worked out from the hours you log.',
+        taxMode: (j.taxMode || 'paye'), taxPct: j.taxPct === undefined ? 20 : j.taxPct,
+        showPct: (j.taxMode || 'paye') === 'flat',
+        taxOptions: [{ id: 'paye', label: 'PAYE' }, { id: 'flat', label: 'Set %' }, { id: 'none', label: 'None' }].map(function (o) {
+          var on = (j.taxMode || 'paye') === o.id;
+          return {
+            label: o.label,
+            bg: on ? 'var(--accent, #F73F5C)' : 'transparent',
+            color: on ? 'var(--onAccent, #FFFFFF)' : 'var(--mut2, #8A90A3)',
+            pick: function () { setD(function (x) { x.jobs[i].taxMode = o.id; if (x.jobs[i].taxPct === undefined) x.jobs[i].taxPct = 20; return x; }); }
+          };
+        }),
+        setPct: function (e) { var v = Number(e.target.value) || 0; setD(function (x) { x.jobs[i].taxPct = v; return x; }); },
+        needsAnchor: ['fortnightly', 'fourweekly', 'custom'].indexOf(j.cycle || 'monthly') > -1,
+        isCustom: (j.cycle || 'monthly') === 'custom',
+        payAnchor: j.payAnchor || '', customDays: j.customDays === undefined ? 28 : j.customDays,
+        cutoffDays: j.cutoffDays === undefined ? 0 : j.cutoffDays,
+        cutoffNote: (Number(j.cutoffDays) || 0) > 0
+          ? 'Hours worked in the ' + (Number(j.cutoffDays)) + ' days before payday land in the next pay run.'
+          : 'Set this if hours worked just before payday are paid the following time.',
+        setAnchor: function (e) { var v = e.target.value; setD(function (x) { x.jobs[i].payAnchor = v; return x; }); },
+        setCustomDays: function (e) { var v = Math.max(1, Number(e.target.value) || 1); setD(function (x) { x.jobs[i].customDays = v; return x; }); },
+        setCutoff: function (e) { var v = Math.max(0, Number(e.target.value) || 0); setD(function (x) { x.jobs[i].cutoffDays = v; return x; }); },
+        canRemove: d.jobs.length > 1,
+        removeLabel: S.confirmJob === j.id ? 'Tap again to remove this job and its shifts' : 'Remove job',
+        removeColor: S.confirmJob === j.id ? 'var(--clay, #E8503A)' : 'var(--dim2, #A9AEBE)',
+        removeTap: function () { if (S.confirmJob === j.id) removeJobFn(j.id); else setUI({ confirmJob: j.id }); },
+        setName: function (e) { var v = e.target.value; setD(function (x) { x.jobs[i].name = v; return x; }); },
+        setRate: function (e) { var v = Number(e.target.value) || 0; setD(function (x) { x.jobs[i].rate = v; return x; }); },
+        setCycle: function (e) { var v = e.target.value; setD(function (x) { x.jobs[i].cycle = v; return x; }); }
+      };
+    }),
+    themeOptions: [{ id: 'auto', label: 'System' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }].map(function (x) {
+      var on = (d.theme || 'auto') === x.id;
+      return {
+        label: x.label,
+        bg: on ? 'var(--accent, #F73F5C)' : 'transparent',
+        color: on ? 'var(--onAccent, #FFFFFF)' : 'var(--mut2, #8A90A3)',
+        pick: function () { setD(function (y) { y.theme = x.id; return y; }); }
+      };
+    }),
+    themeNote: (d.theme || 'auto') === 'auto' ? 'Follows your phone\u2019s light or dark setting' : 'Always ' + (d.theme === 'light' ? 'light' : 'dark'),
+    addJob: function () { addJobFn(); },
+    flatOn: d.flat, flatPct: d.flatPct,
+    flatTrackBg: d.flat ? 'var(--accent, #F73F5C)' : 'var(--card3, #E4E1EC)', flatKnobLeft: d.flat ? '24px' : '3px',
+    toggleFlat: function () { setD(function (x) { x.flat = !x.flat; return x; }); },
+    setFlatPct: function (e) { var v = Number(e.target.value) || 0; setD(function (x) { x.flatPct = v; return x; }); },
+    confirmWipe: S.confirmWipe,
+    settingsNote: 'Everything is saved on this phone only. Pay figures are estimates \u2014 always check them against a real payslip.'
+  };
+}
+
+/* ---------- event registry ---------- */
+var REG = {}, RC = 0;
+function R(fn) { var id = 'r' + (RC++); REG[id] = fn; return id; }
+
+/* ---------- templates ---------- */
+function headerHTML(v) {
+  return '' +
+    '<div style="display: flex; align-items: center; justify-content: space-between; padding: 22px 20px 14px;">' +
+      '<div style="display: flex; flex-direction: column; gap: 2px;">' +
+        '<span style="font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600; display: none">' + esc(v.headerKicker) + '</span>' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -.02em;">' + esc(v.headerTitle) + '</span>' +
+      '</div>' +
+      '<button data-c="' + R(v.openSettings) + '" style="width: 40px; height: 40px; border-radius: 999px; background: var(--card, #FFFFFF); color: var(--mut, #7A8095); font-size: 17px; display: grid; place-items: center; box-shadow: var(--sh);">\u2699</button>' +
+    '</div>';
+}
+
+function homeHTML(v) {
+  var weekDaysHtml = v.weekDays.map(function (d) {
+    return '' +
+      '<div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; justify-content: flex-end; height: 100%;">' +
+        '<div style="width: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; height: 58px;">' +
+          '<div style="width: 100%; border-radius: 5px 5px 0 0; height: ' + d.h2 + '; background-color: #3D87F5"></div>' +
+          '<div style="width: 100%; border-radius: ' + d.radius + '; height: ' + d.h1 + '; background-color: #F73F5C"></div>' +
+          '<div style="width: 100%; border-radius: 3px; background: var(--card2, #F2F0F7); height: ' + d.hEmpty + ';"></div>' +
+        '</div>' +
+        '<span style="font-size: 11px; color: ' + d.labelColor + '; font-weight: 600;">' + esc(d.dow) + '</span>' +
+      '</div>';
+  }).join('');
+
+  var upcomingHtml = v.upcomingBills.map(function (b) {
+    return '' +
+      '<div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line, #F0EEF4);">' +
+        '<div style="width: 38px; height: 38px; border-radius: 11px; background: var(--card2, #F2F0F7); display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0;">' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 15px; font-weight: 600; line-height: 1;">' + esc(b.day) + '</span>' +
+          '<span style="font-size: 9px; color: var(--mut, #7A8095); text-transform: uppercase;">' + esc(b.mon) + '</span>' +
+        '</div>' +
+        '<div style="flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0;">' +
+          '<span style="font-size: 14px; font-weight: 500;">' + esc(b.name) + '</span>' +
+          '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(b.away) + '</span>' +
+        '</div>' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 16px; font-weight: 600;">' + esc(b.amount) + '</span>' +
+      '</div>';
+  }).join('');
+
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 12px; padding: 0 16px;">' +
+      '<div style="background: linear-gradient(145deg, #FF6B84, #F5304F); border-radius: 28px; padding: 22px; display: flex; flex-direction: column; gap: 16px">' +
+        '<div style="display: flex; align-items: baseline; justify-content: space-between;">' +
+          '<span style="font-size: 13px; color: #FFFFFF; font-weight: 500; white-space: nowrap;">Take-home ' + esc(v.monthName) + '</span>' +
+          '<span style="font-size: 12px; color: rgba(255,255,255,.85); white-space: nowrap;">' + esc(v.monthHours) + ' logged</span>' +
+        '</div>' +
+        '<div style="font-family: \'Poppins\', sans-serif; font-size: 46px; font-weight: 600; letter-spacing: -.03em; line-height: 1; color: #FFFFFF">' + esc(v.monthNet) + '</div>' +
+        '<div style="display: flex; gap: 10px;">' +
+          '<div style="flex: 1; background: rgba(255,255,255,.18); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px;">' +
+            '<span style="font-size: 11px; color: rgba(255,255,255,.8);">Gross</span>' +
+            '<span style="font-family: \'Poppins\', sans-serif; font-size: 17px; font-weight: 600; color: #FFFFFF">' + esc(v.monthGross) + '</span>' +
+          '</div>' +
+          '<div style="flex: 1; background: rgba(255,255,255,.18); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px;">' +
+            '<span style="font-size: 11px; color: rgba(255,255,255,.8);">Tax + NI</span>' +
+            '<span style="font-family: \'Poppins\', sans-serif; font-size: 17px; font-weight: 600; color: #FFFFFF">' + esc(v.monthTax) + '</span>' +
+          '</div>' +
+          '<div style="flex: 1; background: rgba(255,255,255,.18); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px;">' +
+            '<span style="font-size: 11px; color: rgba(255,255,255,.8);">Per hour</span>' +
+            '<span style="font-family: \'Poppins\', sans-serif; font-size: 17px; font-weight: 600; color: #FFFFFF">' + esc(v.monthPerHour) + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display: flex; gap: 12px;">' +
+        '<div style="flex: 1; background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 16px; display: flex; flex-direction: column; gap: 6px;">' +
+          '<span style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Next payday</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 20px; font-weight: 600;">' + esc(v.nextPayWhen) + '</span>' +
+          '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(v.nextPayJob) + '</span>' +
+          (v.hasCutoff ? '<span style="font-size: 11px; color: var(--dim, #9AA0B2); line-height: 1.4;">' + esc(v.nextPayCutoff) + '</span>' : '') +
+        '</div>' +
+        '<div style="flex: 1; background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 16px; display: flex; flex-direction: column; gap: 6px;">' +
+          '<span style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Left after bills</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 20px; font-weight: 600; color: ' + v.leftColor + ';">' + esc(v.leftAfterBills) + '</span>' +
+          '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(v.billsLeftLabel) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 16px 16px 6px;">' +
+        '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">' +
+          '<span style="font-size: 14px; font-weight: 600; white-space: nowrap;">This week</span>' +
+          '<button data-c="' + R(v.goHours) + '" style="background: none; color: var(--accent, #F73F5C); font-size: 12px; font-weight: 600;">Log a shift \u2192</button>' +
+        '</div>' +
+        '<div style="display: flex; align-items: flex-end; gap: 6px; height: 84px;">' + weekDaysHtml + '</div>' +
+        '<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 12px 2px 12px; border-top: 1px solid var(--card2, #F2F0F7); margin-top: 10px;">' +
+          '<span style="font-size: 13px; color: var(--mut, #7A8095);">' + esc(v.weekHours) + ' \u00b7 ' + esc(v.weekGross) + ' gross</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 18px; font-weight: 600; color: var(--accent, #F73F5C);">' + esc(v.weekNet) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 16px;">' +
+        '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">' +
+          '<span style="font-size: 14px; font-weight: 600; white-space: nowrap;">Coming out soon</span>' +
+          '<button data-c="' + R(v.goBills) + '" style="background: none; color: var(--accent, #F73F5C); font-size: 12px; font-weight: 600;">Calendar \u2192</button>' +
+        '</div>' +
+        upcomingHtml +
+        (v.noUpcoming ? '<div style="padding: 12px 0 6px; font-size: 13px; color: var(--dim2, #A9AEBE); line-height: 1.5;">No fixed costs added yet. Add rent, council tax and the rest on the Bills tab and they will show up here.</div>' : '') +
+      '</div>' +
+    '</div>';
+}
+
+function hoursHTML(v) {
+  var jobRowsHtml = v.jobRows.map(function (j) {
+    return '' +
+      '<div style="display: flex; align-items: center; gap: 10px;">' +
+        '<span style="width: 9px; height: 9px; border-radius: 999px; background: ' + j.color + '; flex-shrink: 0;"></span>' +
+        '<span style="font-size: 14px; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + esc(j.name) + '</span>' +
+        '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(j.rate) + '</span>' +
+        '<span style="font-size: 13px; color: var(--mut, #7A8095); width: 52px; text-align: right;">' + esc(j.hours) + '</span>' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 15px; font-weight: 600; width: 68px; text-align: right;">' + esc(j.gross) + '</span>' +
+      '</div>';
+  }).join('');
+
+  var dayRowsHtml = v.dayRows.map(function (d) {
+    var shiftsHtml = d.shifts.map(function (s) {
+      return '' +
+        '<button data-c="' + R(s.edit) + '" style="display: flex; align-items: center; gap: 9px; background: var(--card2, #F2F0F7); border-radius: 10px; padding: 8px 10px; text-align: left; width: 100%; color: var(--text, #1E2230);">' +
+          '<span style="width: 7px; height: 26px; border-radius: 4px; background: ' + s.color + '; flex-shrink: 0;"></span>' +
+          '<span style="flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0;">' +
+            '<span style="font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + esc(s.jobName) + '</span>' +
+            '<span style="font-size: 11px; color: var(--mut, #7A8095);">' + esc(s.times) + '</span>' +
+          '</span>' +
+          '<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">' +
+            '<span style="font-family: \'Poppins\', sans-serif; font-size: 14px; font-weight: 600;">' + esc(s.hours) + '</span>' +
+            '<span style="font-size: 11px; color: var(--mut, #7A8095);">' + esc(s.pay) + '</span>' +
+          '</span>' +
+        '</button>';
+    }).join('');
+    return '' +
+      '<div style="background: ' + d.bg + '; border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border: 1px solid ' + d.border + ';">' +
+        '<div style="display: flex; align-items: center; gap: 12px;">' +
+          '<div style="width: 42px; display: flex; flex-direction: column; flex-shrink: 0;">' +
+            '<span style="font-size: 11px; color: var(--mut, #7A8095); font-weight: 600; letter-spacing: .06em;">' + esc(d.dow) + '</span>' +
+            '<span style="font-family: \'Poppins\', sans-serif; font-size: 18px; font-weight: 600; color: ' + d.numColor + ';">' + esc(d.dom) + '</span>' +
+          '</div>' +
+          '<div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0;">' +
+            shiftsHtml +
+            (d.empty ? '<span style="font-size: 13px; color: var(--dim2, #A9AEBE);">No shift</span>' : '') +
+          '</div>' +
+          '<button data-c="' + R(d.add) + '" style="width: 32px; height: 32px; border-radius: 999px; background: var(--accent, #F73F5C); color: #FFFFFF; font-size: 18px; display: grid; place-items: center; flex-shrink: 0;">+</button>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 12px; padding: 0 16px;">' +
+      '<div style="display: flex; align-items: center; justify-content: space-between; background: var(--card, #FFFFFF); border-radius: 999px; box-shadow: var(--sh); padding: 6px;">' +
+        '<button data-c="' + R(v.prevWeek) + '" style="width: 34px; height: 34px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230); font-size: 15px;">‹</button>' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 14px; font-weight: 600; white-space: nowrap;">' + esc(v.weekLabel) + '</span>' +
+        '<button data-c="' + R(v.nextWeek) + '" style="width: 34px; height: 34px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230); font-size: 15px;">›</button>' +
+      '</div>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 18px 18px 8px;">' +
+        '<div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px;">' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 38px; font-weight: 600; letter-spacing: -.03em;">' + esc(v.weekNet) + '</span>' +
+          '<span style="font-size: 13px; color: var(--mut, #7A8095); white-space: nowrap;">after tax</span>' +
+        '</div>' +
+        '<div style="font-size: 13px; color: var(--mut, #7A8095); margin-bottom: 16px;">' + esc(v.weekHours) + ' · ' + esc(v.weekGross) + ' gross · ' + esc(v.weekDeductions) + ' tax + NI</div>' +
+        '<div style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px;">' + jobRowsHtml + '</div>' +
+        '<div style="border-top: 1px solid var(--card2, #F2F0F7); padding: 12px 0; font-size: 12px; color: var(--dim, #9AA0B2); line-height: 1.5;">' + esc(v.taxNote) + '</div>' +
+      '</div>' +
+      '<div style="display: flex; flex-direction: column; gap: 8px;">' + dayRowsHtml + '</div>' +
+    '</div>';
+}
+
+function expHTML(v) {
+  var catBarsHtml = v.catBars.map(function (c) {
+    return '' +
+      '<div style="display: flex; flex-direction: column; gap: 6px;">' +
+        '<div style="display: flex; align-items: baseline; justify-content: space-between;">' +
+          '<span style="font-size: 13px; font-weight: 500;">' + esc(c.name) + '</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 14px; font-weight: 600;">' + esc(c.amount) + '</span>' +
+        '</div>' +
+        '<div style="height: 8px; border-radius: 999px; background: var(--card2, #F2F0F7); overflow: hidden;">' +
+          '<div style="height: 100%; border-radius: 999px; background: ' + c.color + '; width: ' + c.pct + ';"></div>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+
+  var catBlock = v.chartIsCat ? (
+    '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 18px;">' +
+      '<div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px;">' +
+        '<div style="display: flex; flex-direction: column; gap: 3px;">' +
+          '<span style="font-size: 12px; color: var(--mut, #7A8095);">Out so far in ' + esc(v.monthName) + '</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -.03em;">' + esc(v.monthSpend) + '</span>' +
+          '<span style="font-size: 12px; color: var(--dim, #9AA0B2);">' + esc(v.spendSplit) + '</span>' +
+        '</div>' +
+        '<span style="font-size: 12px; color: var(--mut, #7A8095); text-align: right; max-width: 120px;">' + esc(v.spendVsPay) + '</span>' +
+      '</div>' +
+      '<div style="display: flex; flex-direction: column; gap: 12px;">' + catBarsHtml +
+        (v.noCatBars ? '<span style="font-size: 13px; color: var(--dim2, #A9AEBE); line-height: 1.5;">Nothing out yet. Add your fixed monthly costs below, then log spends as they happen.</span>' : '') +
+      '</div>' +
+    '</div>'
+  ) : '';
+
+  var flowBarsHtml = v.flowBars.map(function (f) {
+    return '' +
+      '<div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end;">' +
+        '<div style="display: flex; align-items: flex-end; gap: 3px; height: 130px; width: 100%; justify-content: center;">' +
+          '<div style="width: 42%; border-radius: 4px 4px 0 0; height: ' + f.inH + '; background-color: #3D87F5"></div>' +
+          '<div style="width: 42%; border-radius: 4px 4px 0 0; height: ' + f.outH + '; background-color: #FB8C4B"></div>' +
+        '</div>' +
+        '<span style="font-size: 11px; color: ' + f.labelColor + '; font-weight: 600;">' + esc(f.label) + '</span>' +
+      '</div>';
+  }).join('');
+
+  var flowBlock = v.chartIsFlow ? (
+    '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 18px;">' +
+      '<div style="display: flex; align-items: center; gap: 16px; margin-bottom: 18px;">' +
+        '<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mut, #7A8095);"><span style="width: 9px; height: 9px; border-radius: 999px; background: #3D87F5;"></span>Money in</span>' +
+        '<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mut, #7A8095);"><span style="width: 9px; height: 9px; border-radius: 999px; background: #FB8C4B;"></span>Money out</span>' +
+        '<span style="font-size: 11px; color: var(--dim, #9AA0B2); margin-left: auto;">* part month</span>' +
+      '</div>' +
+      '<div style="display: flex; align-items: flex-end; gap: 10px; height: 170px;">' + flowBarsHtml +
+        (v.noFlow ? '<span style="font-size: 13px; color: var(--dim2, #A9AEBE); line-height: 1.5; align-self: center;">This fills in once you have logged some shifts.</span>' : '') +
+      '</div>' +
+      '<div style="border-top: 1px solid var(--card2, #F2F0F7); margin-top: 14px; padding-top: 14px; display: flex; justify-content: space-between; font-size: 13px;">' +
+        '<span style="color: var(--mut, #7A8095);">' + esc(v.flowSummaryLabel) + '</span>' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-weight: 600; color: ' + v.flowSummaryColor + ';">' + esc(v.flowSummary) + '</span>' +
+      '</div>' +
+    '</div>'
+  ) : '';
+
+  var fixedListHtml = v.fixedList.map(function (b) {
+    return '' +
+      '<div style="display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line, #F0EEF4);">' +
+        '<button data-c="' + R(b.edit) + '" style="flex: 1; display: flex; align-items: center; gap: 12px; padding: 11px 0; background: none; color: var(--text, #1E2230); text-align: left; min-width: 0;">' +
+          '<span style="width: 9px; height: 9px; border-radius: 999px; background: ' + b.color + '; flex-shrink: 0;"></span>' +
+          '<span style="flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0;">' +
+            '<span style="font-size: 14px; font-weight: 500;">' + esc(b.name) + '</span>' +
+            '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(b.sub) + '</span>' +
+          '</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 15px; font-weight: 600;">' + esc(b.amount) + '</span>' +
+        '</button>' +
+        '<button data-c="' + R(b.remove) + '" style="background: none; color: var(--dim2, #A9AEBE); font-size: 15px; width: 24px;">×</button>' +
+      '</div>';
+  }).join('');
+
+  var spendListHtml = v.spendList.map(function (s) {
+    return '' +
+      '<div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line, #F0EEF4);">' +
+        '<span style="width: 9px; height: 9px; border-radius: 999px; background: ' + s.color + '; flex-shrink: 0;"></span>' +
+        '<div style="flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0;">' +
+          '<span style="font-size: 14px; font-weight: 500;">' + esc(s.name) + '</span>' +
+          '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(s.sub) + '</span>' +
+        '</div>' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 15px; font-weight: 600;">' + esc(s.amount) + '</span>' +
+        '<button data-c="' + R(s.remove) + '" style="background: none; color: var(--dim2, #A9AEBE); font-size: 15px; width: 24px;">×</button>' +
+      '</div>';
+  }).join('');
+
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 12px; padding: 0 16px;">' +
+      '<div style="display: flex; background: var(--card, #FFFFFF); border-radius: 999px; box-shadow: var(--sh); padding: 4px;">' +
+        '<button data-c="' + R(v.setChartCat) + '" style="flex: 1; padding: 9px; border-radius: 999px; font-size: 13px; font-weight: 600; background: ' + v.catTabBg + '; color: ' + v.catTabColor + ';">By category</button>' +
+        '<button data-c="' + R(v.setChartFlow) + '" style="flex: 1; padding: 9px; border-radius: 999px; font-size: 13px; font-weight: 600; background: ' + v.flowTabBg + '; color: ' + v.flowTabColor + ';">In vs out</button>' +
+      '</div>' +
+      catBlock + flowBlock +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 8px 16px 14px;">' +
+        '<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0 4px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Fixed monthly costs</span>' +
+          '<button data-c="' + R(v.openBill) + '" style="background: none; color: var(--accent, #F73F5C); font-size: 12px; font-weight: 600;">+ Add</button>' +
+        '</div>' +
+        fixedListHtml +
+        (v.noFixed ? '<div style="padding: 12px 0 4px; font-size: 13px; color: var(--dim2, #A9AEBE); line-height: 1.5;">Rent, council tax, phone, insurance — anything that leaves on the same day each month. Tap + Add.</div>' : '') +
+        '<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 13px 0 2px;">' +
+          '<span style="font-size: 13px; color: var(--mut, #7A8095);">Every month</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 17px; font-weight: 600;">' + esc(v.fixedTotal) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<button data-c="' + R(v.openSpend) + '" style="background: var(--navy, #1E2230); color: #FFFFFF; border-radius: 999px; padding: 16px; font-size: 15px; font-weight: 600; box-shadow: var(--sh);">+ Add a spend</button>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 8px 16px 6px;">' +
+        '<div style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600; padding: 12px 0 4px;">' + esc(v.monthName) + ' spending</div>' +
+        spendListHtml +
+        (v.noSpends ? '<div style="padding: 14px 0 20px; font-size: 13px; color: var(--dim2, #A9AEBE); line-height: 1.5;">Nothing logged yet this month. Rent and other recurring payments aren’t listed here — they live on the Bills tab.</div>' : '') +
+      '</div>' +
+    '</div>';
+}
+
+function billsHTML(v) {
+  var dowLabelsHtml = v.dowLabels.map(function (l) {
+    return '<span style="text-align: center; font-size: 10px; letter-spacing: .06em; color: var(--dim, #9AA0B2); font-weight: 600;">' + esc(l) + '</span>';
+  }).join('');
+
+  var calCellsHtml = v.calCells.map(function (c) {
+    var dotsHtml = c.dots.map(function (d) { return '<span style="width: 4px; height: 4px; border-radius: 999px; background: ' + d + ';"></span>'; }).join('');
+    return '' +
+      '<button data-c="' + R(c.select) + '" style="aspect-ratio: 1; border-radius: 11px; background: ' + c.bg + '; color: ' + c.color + '; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; border: 1px solid ' + c.border + ';">' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 14px; font-weight: ' + c.weight + ';">' + esc(c.dom) + '</span>' +
+        '<span style="display: flex; gap: 2px; height: 4px;">' + dotsHtml + '</span>' +
+      '</button>';
+  }).join('');
+
+  var billListHtml = v.billList.map(function (b) {
+    return '' +
+      '<div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line, #F0EEF4);">' +
+        '<button data-c="' + R(b.togglePaid) + '" style="width: 26px; height: 26px; border-radius: 999px; border: 2px solid ' + b.checkBorder + '; background: ' + b.checkBg + '; color: var(--bg, #F4F2F7); font-size: 13px; display: grid; place-items: center; flex-shrink: 0;">' + b.check + '</button>' +
+        '<button data-c="' + R(b.edit) + '" style="flex: 1; display: flex; align-items: center; gap: 12px; background: none; text-align: left; min-width: 0; padding: 0;">' +
+          '<span style="flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0;">' +
+            '<span style="font-size: 14px; font-weight: 500; text-decoration: ' + b.strike + '; color: ' + b.nameColor + ';">' + esc(b.name) + '</span>' +
+            '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(b.sub) + '</span>' +
+          '</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 16px; font-weight: 600; color: ' + b.nameColor + ';">' + esc(b.amount) + '</span>' +
+        '</button>' +
+        '<button data-c="' + R(b.remove) + '" style="background: none; color: var(--faint, #C2C6D2); font-size: 15px; width: 22px;">×</button>' +
+      '</div>';
+  }).join('');
+
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 12px; padding: 0 16px;">' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 16px;">' +
+        '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">' +
+          '<button data-c="' + R(v.prevMonth) + '" style="width: 32px; height: 32px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230);">‹</button>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 16px; font-weight: 600;">' + esc(v.calMonthLabel) + '</span>' +
+          '<button data-c="' + R(v.nextMonth) + '" style="width: 32px; height: 32px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230);">›</button>' +
+        '</div>' +
+        '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px;">' + dowLabelsHtml + '</div>' +
+        '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">' + calCellsHtml + '</div>' +
+      '</div>' +
+      '<div style="display: flex; gap: 12px;">' +
+        '<div style="flex: 1; background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 15px; display: flex; flex-direction: column; gap: 5px;">' +
+          '<span style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Bills this month</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 22px; font-weight: 600;">' + esc(v.billsTotal) + '</span>' +
+        '</div>' +
+        '<div style="flex: 1; background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 15px; display: flex; flex-direction: column; gap: 5px;">' +
+          '<span style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Still to come out</span>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 22px; font-weight: 600; color: var(--clay, #E8503A);">' + esc(v.billsUnpaid) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 8px 16px 14px;">' +
+        '<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0 4px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">' + esc(v.billListTitle) + '</span>' +
+          '<button data-c="' + R(v.openBill) + '" style="background: none; color: var(--accent, #F73F5C); font-size: 12px; font-weight: 600;">+ Add bill</button>' +
+        '</div>' +
+        billListHtml +
+        (v.noFixed ? '<div style="padding: 12px 0 4px; font-size: 13px; color: var(--dim2, #A9AEBE); line-height: 1.5;">Nothing added yet. Tap + Add bill for anything that goes out on the same day each month.</div>' : '') +
+      '</div>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 24px; box-shadow: var(--sh); padding: 18px; display: flex; flex-direction: column; gap: 12px;">' +
+        '<div style="display: flex; flex-direction: column; gap: 4px;">' +
+          '<span style="font-size: 14px; font-weight: 600;">Reminders on your phone</span>' +
+          '<span style="font-size: 12.5px; color: var(--mut, #7A8095); line-height: 1.5;">Sends the next six months of bill dates and paydays to your calendar, each with an alert at 9am the day before. Tap again after you change a bill.</span>' +
+        '</div>' +
+        '<button data-c="' + R(v.exportIcs) + '" style="background: var(--navy, #1E2230); color: #FFFFFF; border-radius: 999px; padding: 15px; font-size: 15px; font-weight: 600;">Add to calendar</button>' +
+        (v.hasIcsMsg ? '<span style="font-size: 12.5px; color: var(--accent, #F73F5C); font-weight: 500; line-height: 1.45;">' + esc(v.icsMsg) + '</span>' : '') +
+      '</div>' +
+    '</div>';
+}
+
+function shiftSheetHTML(v) {
+  var jobPickerHtml = v.jobPicker.map(function (j) {
+    return '<button data-c="' + R(j.pick) + '" style="flex: 1; padding: 13px 10px; border-radius: 14px; background: ' + j.bg + '; color: ' + j.color + '; font-size: 14px; font-weight: 600; border: 1.5px solid ' + j.border + '; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + esc(j.name) + '</button>';
+  }).join('');
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 18px;">' +
+      '<div style="display: flex; align-items: baseline; justify-content: space-between;">' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 21px; font-weight: 600;">' + esc(v.shiftSheetTitle) + '</span>' +
+        '<span style="font-size: 13px; color: var(--mut, #7A8095);">' + esc(v.shiftSheetDate) + '</span>' +
+      '</div>' +
+      '<div style="display: flex; flex-direction: column; gap: 8px;">' +
+        '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Which job</span>' +
+        '<div style="display: flex; flex-wrap: wrap; gap: 8px;">' + jobPickerHtml + '</div>' +
+      '</div>' +
+      '<div style="display: flex; gap: 10px;">' +
+        '<label style="flex: 1; display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Start</span>' +
+          '<input type="time" data-fid="shift-start" value="' + esc(v.formStart) + '" data-i="' + R(v.setStart) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 13px; color: var(--text, #1E2230); font-size: 17px; width: 100%;">' +
+        '</label>' +
+        '<label style="flex: 1; display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Finish</span>' +
+          '<input type="time" data-fid="shift-end" value="' + esc(v.formEnd) + '" data-i="' + R(v.setEnd) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 13px; color: var(--text, #1E2230); font-size: 17px; width: 100%;">' +
+        '</label>' +
+      '</div>' +
+      '<div style="display: flex; align-items: center; justify-content: space-between; background: var(--card, #FFFFFF); border-radius: 14px; box-shadow: var(--sh); padding: 12px 14px;">' +
+        '<span style="font-size: 14px;">Unpaid break</span>' +
+        '<div style="display: flex; align-items: center; gap: 12px;">' +
+          '<button data-c="' + R(v.breakDown) + '" style="width: 32px; height: 32px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230); font-size: 17px;">−</button>' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 16px; font-weight: 600; width: 58px; text-align: center;">' + esc(v.formBreak) + '</span>' +
+          '<button data-c="' + R(v.breakUp) + '" style="width: 32px; height: 32px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230); font-size: 17px;">+</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="background: linear-gradient(145deg, #FF6B84, #F5304F); border-radius: 18px; padding: 15px 16px; display: flex; align-items: center; justify-content: space-between;">' +
+        '<div style="display: flex; flex-direction: column; gap: 2px;">' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 26px; font-weight: 600;">' + esc(v.formHours) + '</span>' +
+          '<span style="font-size: 12px; color: rgba(255,255,255,.8);">' + esc(v.formOvernight) + '</span>' +
+        '</div>' +
+        '<div style="display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 22px; font-weight: 600;">' + esc(v.formPay) + '</span>' +
+          '<span style="font-size: 12px; color: rgba(255,255,255,.8);">gross for this shift</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display: flex; gap: 10px;">' +
+        (v.isEditingShift ? '<button data-c="' + R(v.deleteShift) + '" style="padding: 15px 18px; border-radius: 999px; background: var(--dangerBg, #FDECE8); color: var(--clay, #E8503A); font-size: 15px; font-weight: 600;">Delete</button>' : '') +
+        '<button data-c="' + R(v.saveShift) + '" style="flex: 1; padding: 15px; border-radius: 999px; box-shadow: 0 8px 18px rgba(247,63,92,.26); background: var(--accent, #F73F5C); color: var(--onAccent, #FFFFFF); font-size: 16px; font-weight: 700;">Save shift</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function spendSheetHTML(v) {
+  var catPickerHtml = v.catPicker.map(function (c) {
+    return '<button data-c="' + R(c.pick) + '" style="padding: 10px 14px; border-radius: 999px; background: ' + c.bg + '; color: ' + c.color + '; font-size: 13px; font-weight: 600; border: 1.5px solid ' + c.border + ';">' + esc(c.name) + '</button>';
+  }).join('');
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 18px;">' +
+      '<span style="font-family: \'Poppins\', sans-serif; font-size: 21px; font-weight: 600;">Add a spend</span>' +
+      '<div style="display: flex; flex-direction: column; gap: 8px;">' +
+        '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Category</span>' +
+        '<div style="display: flex; flex-wrap: wrap; gap: 8px;">' + catPickerHtml + '</div>' +
+      '</div>' +
+      '<label style="display: flex; flex-direction: column; gap: 7px;">' +
+        '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Amount</span>' +
+        '<div style="display: flex; align-items: center; gap: 10px; background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 14px; padding: 4px 16px;">' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 24px; color: var(--mut, #7A8095);">£</span>' +
+          '<input type="number" inputmode="decimal" step="0.01" placeholder="0.00" data-fid="spend-amount" value="' + esc(v.formAmount) + '" data-i="' + R(v.setAmount) + '" style="background: none; border: 0; outline: none; color: var(--text, #1E2230); font-family: \'Poppins\', sans-serif; font-size: 30px; font-weight: 600; padding: 12px 0; width: 100%;">' +
+        '</div>' +
+      '</label>' +
+      '<label style="display: flex; flex-direction: column; gap: 7px;">' +
+        '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Note (optional)</span>' +
+        '<input type="text" placeholder="Big shop" data-fid="spend-note" value="' + esc(v.formNote) + '" data-i="' + R(v.setNote) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 14px; color: var(--text, #1E2230); font-size: 15px;">' +
+      '</label>' +
+      '<button data-c="' + R(v.saveSpend) + '" style="padding: 15px; border-radius: 999px; box-shadow: 0 8px 18px rgba(247,63,92,.26); background: var(--accent, #F73F5C); color: var(--onAccent, #FFFFFF); font-size: 16px; font-weight: 700;">Save</button>' +
+    '</div>';
+}
+
+function billSheetHTML(v) {
+  var catPickerHtml = v.catPicker.map(function (c) {
+    return '<button data-c="' + R(c.pick) + '" style="padding: 10px 14px; border-radius: 999px; background: ' + c.bg + '; color: ' + c.color + '; font-size: 13px; font-weight: 600; border: 1.5px solid ' + c.border + ';">' + esc(c.name) + '</button>';
+  }).join('');
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 18px;">' +
+      '<span style="font-family: \'Poppins\', sans-serif; font-size: 21px; font-weight: 600;">' + esc(v.billSheetTitle) + '</span>' +
+      '<label style="display: flex; flex-direction: column; gap: 7px;">' +
+        '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">What is it</span>' +
+        '<input type="text" placeholder="Broadband" data-fid="bill-name" value="' + esc(v.formName) + '" data-i="' + R(v.setName) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 14px; color: var(--text, #1E2230); font-size: 15px;">' +
+      '</label>' +
+      '<div style="display: flex; gap: 10px;">' +
+        '<label style="flex: 1; display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Amount</span>' +
+          '<input type="number" inputmode="decimal" step="0.01" placeholder="0.00" data-fid="bill-amount" value="' + esc(v.formAmount) + '" data-i="' + R(v.setAmount) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 14px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' +
+        '</label>' +
+        '<label style="flex: 1; display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Day of month</span>' +
+          '<input type="number" inputmode="numeric" min="1" max="31" placeholder="1" data-fid="bill-day" value="' + esc(v.formDay) + '" data-i="' + R(v.setDay) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 14px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' +
+        '</label>' +
+      '</div>' +
+      '<div style="display: flex; flex-direction: column; gap: 8px;">' +
+        '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Category</span>' +
+        '<div style="display: flex; flex-wrap: wrap; gap: 8px;">' + catPickerHtml + '</div>' +
+      '</div>' +
+      '<div style="display: flex; gap: 10px;">' +
+        (v.isEditingBill ? '<button data-c="' + R(v.deleteBill) + '" style="padding: 15px 18px; border-radius: 999px; background: var(--dangerBg, #FDECE8); color: var(--clay, #E8503A); font-size: 15px; font-weight: 600;">Delete</button>' : '') +
+        '<button data-c="' + R(v.saveBill) + '" style="flex: 1; padding: 15px; border-radius: 999px; box-shadow: 0 8px 18px rgba(247,63,92,.26); background: var(--accent, #F73F5C); color: var(--onAccent, #FFFFFF); font-size: 16px; font-weight: 700;">Save</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function settingsSheetHTML(v) {
+  var jobEditorsHtml = v.jobEditors.map(function (j, i) {
+    var payOptionsHtml = j.payOptions.map(function (o) {
+      return '<button data-c="' + R(o.pick) + '" style="flex: 1; padding: 9px 6px; border-radius: 999px; font-size: 13px; font-weight: 600; background: ' + o.bg + '; color: ' + o.color + ';">' + esc(o.label) + '</button>';
+    }).join('');
+    var taxOptionsHtml = j.taxOptions.map(function (o) {
+      return '<button data-c="' + R(o.pick) + '" style="flex: 1; padding: 9px 6px; border-radius: 9px; font-size: 13px; font-weight: 600; background: ' + o.bg + '; color: ' + o.color + ';">' + esc(o.label) + '</button>';
+    }).join('');
+    var cycles = ['weekly', 'fortnightly', 'fourweekly', 'monthly', 'custom'];
+    var cycleLabels = { weekly: 'Weekly (Fri)', fortnightly: 'Every 2 weeks', fourweekly: 'Every 4 weeks', monthly: 'Monthly (28th)', custom: 'Custom…' };
+    var cycleOptsHtml = cycles.map(function (c) { return '<option value="' + c + '"' + (j.cycle === c ? ' selected' : '') + '>' + cycleLabels[c] + '</option>'; }).join('');
+    return '' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 15px; display: flex; flex-direction: column; gap: 12px;">' +
+        '<div style="display: flex; align-items: center; gap: 9px;">' +
+          '<span style="width: 9px; height: 9px; border-radius: 999px; background: ' + j.color + ';"></span>' +
+          '<input type="text" data-fid="job-name-' + i + '" value="' + esc(j.name) + '" data-i="' + R(j.setName) + '" style="flex: 1; background: none; border: 0; outline: none; color: var(--text, #1E2230); font-family: \'Poppins\', sans-serif; font-size: 17px; font-weight: 600; border-bottom: 1px solid var(--card3, #E4E1EC); padding: 4px 0;">' +
+        '</div>' +
+        '<div style="display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">How this job pays</span>' +
+          '<div style="display: flex; background: var(--card2, #F2F0F7); border-radius: 999px; padding: 4px; gap: 4px;">' + payOptionsHtml + '</div>' +
+          '<span style="font-size: 12px; color: var(--dim, #9AA0B2); line-height: 1.45;">' + esc(j.payNote) + '</span>' +
+        '</div>' +
+        '<div style="display: flex; gap: 10px;">' +
+          '<label style="flex: 1; display: flex; flex-direction: column; gap: 6px;">' +
+            '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">' + esc(j.rateLabel) + '</span>' +
+            '<input type="number" inputmode="decimal" step="0.01" data-fid="job-rate-' + i + '" value="' + esc(j.rate) + '" data-i="' + R(j.setRate) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' +
+          '</label>' +
+          '<label style="flex: 1; display: flex; flex-direction: column; gap: 6px;">' +
+            '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Paid</span>' +
+            '<select data-fid="job-cycle-' + i + '" data-i="' + R(j.setCycle) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' + cycleOptsHtml + '</select>' +
+          '</label>' +
+        '</div>' +
+        (j.needsAnchor ? (
+          '<div style="display: flex; gap: 10px;">' +
+            '<label style="flex: 1; display: flex; flex-direction: column; gap: 6px;">' +
+              '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">A payday you know</span>' +
+              '<input type="date" data-fid="job-anchor-' + i + '" value="' + esc(j.payAnchor) + '" data-i="' + R(j.setAnchor) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' +
+            '</label>' +
+            (j.isCustom ? (
+              '<label style="width: 118px; display: flex; flex-direction: column; gap: 6px;">' +
+                '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Every … days</span>' +
+                '<input type="number" inputmode="numeric" min="1" data-fid="job-customdays-' + i + '" value="' + esc(j.customDays) + '" data-i="' + R(j.setCustomDays) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' +
+              '</label>'
+            ) : '') +
+          '</div>'
+        ) : '') +
+        '<div style="display: flex; flex-direction: column; gap: 6px;">' +
+          '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Cut-off before payday</span>' +
+          '<label style="display: flex; align-items: center; gap: 10px;">' +
+            '<input type="number" inputmode="numeric" min="0" max="31" data-fid="job-cutoff-' + i + '" value="' + esc(j.cutoffDays) + '" data-i="' + R(j.setCutoff) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 10px; color: var(--text, #1E2230); font-size: 15px; width: 78px;">' +
+            '<span style="font-size: 13px; color: var(--mut, #7A8095); white-space: nowrap;">days before</span>' +
+          '</label>' +
+          '<span style="font-size: 12px; color: var(--dim, #9AA0B2); line-height: 1.45;">' + esc(j.cutoffNote) + '</span>' +
+        '</div>' +
+        '<div style="display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Tax on this job</span>' +
+          '<div style="display: flex; background: var(--card2, #F2F0F7); border-radius: 12px; padding: 4px; gap: 4px;">' + taxOptionsHtml + '</div>' +
+          (j.showPct ? (
+            '<label style="display: flex; align-items: center; gap: 10px;">' +
+              '<span style="font-size: 13px; color: var(--mut, #7A8095);">Take off</span>' +
+              '<input type="number" inputmode="decimal" step="1" data-fid="job-taxpct-' + i + '" value="' + esc(j.taxPct) + '" data-i="' + R(j.setPct) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 10px; color: var(--text, #1E2230); font-size: 15px; width: 78px;">' +
+              '<span style="font-size: 13px; color: var(--mut, #7A8095);">% of this job</span>' +
+            '</label>'
+          ) : '') +
+        '</div>' +
+        (j.canRemove ? '<button data-c="' + R(j.removeTap) + '" style="background: none; color: ' + j.removeColor + '; font-size: 13px; font-weight: 600; text-align: left; padding: 2px 0;">' + esc(j.removeLabel) + '</button>' : '') +
+      '</div>';
+  }).join('');
+
+  var themeOptionsHtml = v.themeOptions.map(function (t) {
+    return '<button data-c="' + R(t.pick) + '" style="flex: 1; padding: 10px 6px; border-radius: 9px; font-size: 13px; font-weight: 600; background: ' + t.bg + '; color: ' + t.color + ';">' + esc(t.label) + '</button>';
+  }).join('');
+
+  return '' +
+    '<div style="display: flex; flex-direction: column; gap: 20px;">' +
+      '<span style="font-family: \'Poppins\', sans-serif; font-size: 21px; font-weight: 600;">Your jobs &amp; tax</span>' +
+      jobEditorsHtml +
+      '<button data-c="' + R(v.addJob) + '" style="padding: 14px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--accent, #F73F5C); font-size: 15px; font-weight: 600;">+ Add another job</button>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 15px; display: flex; flex-direction: column; gap: 12px;">' +
+        '<div style="display: flex; flex-direction: column; gap: 3px;">' +
+          '<span style="font-size: 15px; font-weight: 600;">Appearance</span>' +
+          '<span style="font-size: 12px; color: var(--mut, #7A8095);">' + esc(v.themeNote) + '</span>' +
+        '</div>' +
+        '<div style="display: flex; background: var(--card2, #F2F0F7); border-radius: 12px; padding: 4px; gap: 4px;">' + themeOptionsHtml + '</div>' +
+      '</div>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 15px; display: flex; flex-direction: column; gap: 12px;">' +
+        '<div style="display: flex; align-items: center; justify-content: space-between;">' +
+          '<div style="display: flex; flex-direction: column; gap: 2px;">' +
+            '<span style="font-size: 15px; font-weight: 600;">One rate for everything</span>' +
+            '<span style="font-size: 12px; color: var(--mut, #7A8095);">Overrides the per-job settings above</span>' +
+          '</div>' +
+          '<button data-c="' + R(v.toggleFlat) + '" style="width: 52px; height: 31px; border-radius: 999px; background: ' + v.flatTrackBg + '; position: relative; flex-shrink: 0;">' +
+            '<span style="position: absolute; top: 3px; left: ' + v.flatKnobLeft + '; width: 25px; height: 25px; border-radius: 999px; background: var(--text, #1E2230); transition: left .18s ease;"></span>' +
+          '</button>' +
+        '</div>' +
+        (v.flatOn ? (
+          '<label style="display: flex; align-items: center; gap: 12px;">' +
+            '<span style="font-size: 13px; color: var(--mut, #7A8095);">Deduct</span>' +
+            '<input type="number" inputmode="decimal" step="1" data-fid="flat-pct" value="' + esc(v.flatPct) + '" data-i="' + R(v.setFlatPct) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 10px; color: var(--text, #1E2230); font-size: 15px; width: 84px;">' +
+            '<span style="font-size: 13px; color: var(--mut, #7A8095);">% of everything</span>' +
+          '</label>'
+        ) : '') +
+      '</div>' +
+      '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 15px; display: flex; flex-direction: column; gap: 14px;">' +
+        '<label style="display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Your name</span>' +
+          '<input type="text" placeholder="Sam" data-fid="user-name" value="' + esc(v.userName) + '" data-i="' + R(v.setUserName) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px;" />' +
+        '</label>' +
+        '<div style="display: flex; flex-direction: column; gap: 8px;">' +
+          '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Passcode</span>' +
+          '<div style="display: flex; gap: 10px; align-items: center;">' +
+            '<input type="text" inputmode="numeric" placeholder="4 digits" data-fid="pin-edit" value="' + esc(v.pinEdit) + '" data-i="' + R(v.setPinEdit) + '" style="flex: 1; background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; letter-spacing: .25em; width: 100%;" />' +
+            '<button data-c="' + R(v.savePin) + '" style="padding: 12px 16px; border-radius: 12px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230); font-size: 14px; font-weight: 600;">Save</button>' +
+            (v.hasPin ? '<button data-c="' + R(v.removePin) + '" style="padding: 12px 14px; border-radius: 12px; background: var(--dangerBg, #FDECE8); color: var(--clay, #E8503A); font-size: 14px; font-weight: 600;">Off</button>' : '') +
+          '</div>' +
+          '<span style="font-size: 12px; color: var(--dim, #9AA0B2); line-height: 1.45;">' + esc(v.pinStatus) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size: 12px; color: var(--dim, #9AA0B2); line-height: 1.55;">' + esc(v.settingsNote) + '</div>' +
+      '<button data-c="' + R(v.wipeTap) + '" style="padding: 14px; border-radius: 999px; background: var(--dangerBg, #FDECE8); color: var(--clay, #E8503A); font-size: 14px; font-weight: 600;">' + esc(v.wipeLabel) + '</button>' +
+      '<button data-c="' + R(v.closeSheet) + '" style="padding: 15px; border-radius: 999px; background: var(--card2, #F2F0F7); color: var(--text, #1E2230); font-size: 16px; font-weight: 600;">Done</button>' +
+    '</div>';
+}
+
+function sheetHTML(v) {
+  var inner = v.sheetIsShift ? shiftSheetHTML(v) : v.sheetIsSpend ? spendSheetHTML(v) : v.sheetIsBill ? billSheetHTML(v) : v.sheetIsSettings ? settingsSheetHTML(v) : '';
+  return '' +
+    '<div data-c="' + R(v.closeSheet) + '" style="position: fixed; inset: 0; background: var(--overlay, rgba(30,34,48,.42)); z-index: 40; animation: fadeIn .16s ease-out;"></div>' +
+    '<div data-sheet-drag style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-width: 440px; margin: 0 auto; background: var(--sheet, #F7F6FA); border-radius: 26px 26px 0 0; padding: 10px 20px calc(26px + env(safe-area-inset-bottom)); animation: sheetUp .24s cubic-bezier(.22,1,.36,1); max-height: 90vh; overflow-y: auto; border-top: 1px solid var(--sheetLine, #EDEAF2); transform: ' + v.sheetShift + '; transition: ' + v.sheetEase + ';">' +
+      '<div data-grab-handle style="padding: 6px 0 14px; margin: -6px 0 4px; touch-action: none; cursor: grab;">' +
+        '<div style="width: 42px; height: 5px; border-radius: 999px; background: var(--grab, #D8D5E0); margin: 0 auto;"></div>' +
+      '</div>' +
+      inner +
+    '</div>';
+}
+
+function setupHTML(v) {
+  var suJ1PayHtml = v.suJ1Pay.map(function (o) {
+    return '<button data-c="' + R(o.pick) + '" style="flex: 1; padding: 9px 6px; border-radius: 999px; font-size: 13px; font-weight: 600; background: ' + o.bg + '; color: ' + o.color + ';">' + esc(o.label) + '</button>';
+  }).join('');
+  var suJ2PayHtml = v.suJ2Pay.map(function (o) {
+    return '<button data-c="' + R(o.pick) + '" style="flex: 1; padding: 9px 6px; border-radius: 999px; font-size: 13px; font-weight: 600; background: ' + o.bg + '; color: ' + o.color + ';">' + esc(o.label) + '</button>';
+  }).join('');
+  var cycles = ['weekly', 'fortnightly', 'fourweekly', 'monthly', 'custom'];
+  var cycleLabels = { weekly: 'Weekly (Fri)', fortnightly: 'Every 2 weeks', fourweekly: 'Every 4 weeks', monthly: 'Monthly (28th)', custom: 'Custom…' };
+  var j1CycleOpts = cycles.map(function (c) { return '<option value="' + c + '"' + (v.suJ1c === c ? ' selected' : '') + '>' + cycleLabels[c] + '</option>'; }).join('');
+  var j2CycleOpts = cycles.map(function (c) { return '<option value="' + c + '"' + (v.suJ2c === c ? ' selected' : '') + '>' + cycleLabels[c] + '</option>'; }).join('');
+
+  var j2Block = v.suJ2on ? (
+    '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 16px; display: flex; flex-direction: column; gap: 12px;">' +
+      '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Second job</span>' +
+      '<input type="text" placeholder="Where you work" data-fid="su-j2n" value="' + esc(v.suJ2n) + '" data-i="' + R(v.setSuJ2n) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 13px; color: var(--text, #1E2230); font-size: 15px;" />' +
+      '<div style="display: flex; background: var(--card2, #F2F0F7); border-radius: 999px; padding: 4px; gap: 4px;">' + suJ2PayHtml + '</div>' +
+      '<div style="display: flex; gap: 10px;">' +
+        '<label style="flex: 1; display: flex; flex-direction: column; gap: 6px;">' +
+          '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">' + esc(v.suJ2Label2) + '</span>' +
+          '<input type="number" inputmode="decimal" step="0.01" placeholder="11.44" data-fid="su-j2r" value="' + esc(v.suJ2r) + '" data-i="' + R(v.setSuJ2r) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;" />' +
+        '</label>' +
+        '<label style="flex: 1; display: flex; flex-direction: column; gap: 6px;">' +
+          '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Paid</span>' +
+          '<select data-fid="su-j2c" data-i="' + R(v.setSuJ2c) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' + j2CycleOpts + '</select>' +
+        '</label>' +
+      '</div>' +
+    '</div>'
+  ) : '';
+
+  return '' +
+    '<div style="position: fixed; inset: 0; z-index: 70; background: var(--bg, #F4F2F7); overflow-y: auto; max-width: 440px; margin: 0 auto;">' +
+      '<div style="display: flex; flex-direction: column; gap: 14px; padding: 34px 20px 40px;">' +
+        '<div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px;">' +
+          '<span style="font-family: \'Poppins\', sans-serif; font-size: 28px; font-weight: 600; letter-spacing: -.02em;">Set up your tracker</span>' +
+          '<span style="font-size: 14px; color: var(--mut, #7A8095); line-height: 1.5;">Two minutes now, then you only ever log shifts. You can change any of this later.</span>' +
+        '</div>' +
+        '<label style="display: flex; flex-direction: column; gap: 7px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Your first name</span>' +
+          '<input type="text" placeholder="Sam" data-fid="su-name" value="' + esc(v.suName) + '" data-i="' + R(v.setSuName) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 14px; color: var(--text, #1E2230); font-size: 16px;" />' +
+        '</label>' +
+        '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 16px; display: flex; flex-direction: column; gap: 12px;">' +
+          '<span style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">First job</span>' +
+          '<input type="text" placeholder="Where you work" data-fid="su-j1n" value="' + esc(v.suJ1n) + '" data-i="' + R(v.setSuJ1n) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 13px; padding: 13px; color: var(--text, #1E2230); font-size: 15px;" />' +
+          '<div style="display: flex; background: var(--card2, #F2F0F7); border-radius: 999px; padding: 4px; gap: 4px;">' + suJ1PayHtml + '</div>' +
+          '<div style="display: flex; gap: 10px;">' +
+            '<label style="flex: 1; display: flex; flex-direction: column; gap: 6px;">' +
+              '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">' + esc(v.suJ1Label) + '</span>' +
+              '<input type="number" inputmode="decimal" step="0.01" placeholder="12.60" data-fid="su-j1r" value="' + esc(v.suJ1r) + '" data-i="' + R(v.setSuJ1r) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;" />' +
+            '</label>' +
+            '<label style="flex: 1; display: flex; flex-direction: column; gap: 6px;">' +
+              '<span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--mut2, #8A90A3); font-weight: 600;">Paid</span>' +
+              '<select data-fid="su-j1c" data-i="' + R(v.setSuJ1c) + '" style="background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 11px; color: var(--text, #1E2230); font-size: 15px; width: 100%;">' + j1CycleOpts + '</select>' +
+            '</label>' +
+          '</div>' +
+        '</div>' +
+        j2Block +
+        '<button data-c="' + R(v.toggleSuJ2) + '" style="background: none; color: var(--accent, #F73F5C); font-size: 14px; font-weight: 600; text-align: left; padding: 2px 2px 6px;">' + esc(v.suJ2Label) + '</button>' +
+        '<div style="background: var(--card, #FFFFFF); border-radius: 22px; box-shadow: var(--sh); padding: 16px; display: flex; flex-direction: column; gap: 12px;">' +
+          '<div style="display: flex; flex-direction: column; gap: 3px;">' +
+            '<span style="font-size: 15px; font-weight: 600;">Lock with a code (optional)</span>' +
+            '<span style="font-size: 12px; color: var(--mut, #7A8095); line-height: 1.45;">4 digits, asked when you open the app. Kept on this phone.</span>' +
+          '</div>' +
+          '<div style="display: flex; gap: 10px;">' +
+            '<input type="text" inputmode="numeric" placeholder="Code" data-fid="su-pin" value="' + esc(v.suPin) + '" data-i="' + R(v.setSuPin) + '" style="flex: 1; background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 12px; color: var(--text, #1E2230); font-size: 16px; letter-spacing: .3em; width: 100%;" />' +
+            '<input type="text" inputmode="numeric" placeholder="Again" data-fid="su-pin2" value="' + esc(v.suPin2) + '" data-i="' + R(v.setSuPin2) + '" style="flex: 1; background: var(--card2, #F2F0F7); border: 1.5px solid var(--card3, #E4E1EC); border-radius: 12px; padding: 12px; color: var(--text, #1E2230); font-size: 16px; letter-spacing: .3em; width: 100%;" />' +
+          '</div>' +
+        '</div>' +
+        (v.hasSuError ? '<span style="font-size: 13px; color: var(--clay, #E8503A);">' + esc(v.suError) + '</span>' : '') +
+        '<button data-c="' + R(v.finishSetup) + '" style="padding: 16px; border-radius: 999px; box-shadow: 0 8px 18px rgba(247,63,92,.26); background: var(--accent, #F73F5C); color: var(--onAccent, #FFFFFF); font-size: 16px; font-weight: 700;">Start tracking</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function lockHTML(v) {
+  var pinDotsHtml = v.pinDots.map(function (p) {
+    return '<span style="width: 14px; height: 14px; border-radius: 999px; background: ' + p.bg + '; border: 1.5px solid ' + p.border + ';"></span>';
+  }).join('');
+  var pinKeysHtml = v.pinKeys.map(function (k) {
+    return '<button data-c="' + R(k.tap) + '" style="height: 74px; border-radius: 999px; background: var(--card, #FFFFFF); color: var(--text, #1E2230); font-family: \'Poppins\', sans-serif; font-size: 24px; font-weight: 500; visibility: ' + k.shown + ';">' + esc(k.label) + '</button>';
+  }).join('');
+  return '' +
+    '<div style="position: fixed; inset: 0; z-index: 70; background: var(--bg, #F4F2F7); max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 30px;">' +
+      '<div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">' +
+        '<span style="font-family: \'Poppins\', sans-serif; font-size: 24px; font-weight: 600;">' + esc(v.lockGreeting) + '</span>' +
+        '<span style="font-size: 14px; color: var(--mut, #7A8095);">Enter your 4-digit code</span>' +
+      '</div>' +
+      '<div style="display: flex; gap: 14px;">' + pinDotsHtml + '</div>' +
+      (v.hasSuError ? '<span style="font-size: 13px; color: var(--clay, #E8503A);">' + esc(v.suError) + '</span>' : '') +
+      '<div style="display: grid; grid-template-columns: repeat(3, 74px); gap: 14px;">' + pinKeysHtml + '</div>' +
+      '<button data-c="' + R(v.wipeTap) + '" style="background: none; color: ' + v.forgotColor + '; font-size: 13px; font-weight: 600; padding: 8px 14px; text-align: center; line-height: 1.4;">' + esc(v.forgotLabel) + '</button>' +
+    '</div>';
+}
+
+function tabbarHTML(v) {
+  var tabsHtml = v.tabs.map(function (t) {
+    return '' +
+      '<button data-c="' + R(t.go) + '" style="background: ' + t.bg + '; border-radius: 999px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 0; color: ' + t.color + '; transition: background .16s ease;">' +
+        '<span style="font-size: 19px; line-height: 1;">' + t.icon + '</span>' +
+        '<span style="font-size: 10.5px; font-weight: 600; letter-spacing: .01em;">' + esc(t.label) + '</span>' +
+      '</button>';
+  }).join('');
+  return '<div style="position: fixed; bottom: calc(14px + env(safe-area-inset-bottom)); left: 16px; right: 16px; z-index: 30; max-width: 408px; margin: 0 auto; background: var(--navy, #1E2230); border-radius: 999px; box-shadow: 0 14px 34px rgba(30,34,48,.26); display: grid; grid-template-columns: repeat(4, 1fr); padding: 7px;">' + tabsHtml + '</div>';
+}
+
+function appHTML(v) {
+  return '' +
+    '<div style="font-family: \'Poppins\', system-ui, sans-serif; background: var(--bg, #F4F2F7); color: var(--text, #1E2230); min-height: 100vh; max-width: 440px; margin: 0 auto; position: relative; overflow-x: hidden; padding-bottom: 116px;">' +
+      headerHTML(v) +
+      (v.isHome ? homeHTML(v) : '') +
+      (v.isHours ? hoursHTML(v) : '') +
+      (v.isExp ? expHTML(v) : '') +
+      (v.isBills ? billsHTML(v) : '') +
+      (v.sheetOpen ? sheetHTML(v) : '') +
+      (v.isSetup ? setupHTML(v) : '') +
+      (v.isLocked ? lockHTML(v) : '') +
+      tabbarHTML(v) +
+    '</div>';
+}
+
+/* ---------- mount / render / events ---------- */
+var app = document.getElementById('app');
+
+function captureFocus() {
+  var el = document.activeElement;
+  if (!el || !app.contains(el)) return null;
+  var fid = el.getAttribute('data-fid');
+  if (!fid) return null;
+  var info = { fid: fid };
+  if ('selectionStart' in el) { try { info.start = el.selectionStart; info.end = el.selectionEnd; } catch (e) {} }
+  return info;
+}
+function restoreFocus(info) {
+  if (!info) return;
+  var el = app.querySelector('[data-fid="' + info.fid + '"]');
+  if (!el) return;
+  el.focus();
+  if (info.start != null && el.setSelectionRange) { try { el.setSelectionRange(info.start, info.end); } catch (e) {} }
+}
+
+var _grab = false, _y0 = null;
+function wireSheetTouch() {
+  var sheetEl = app.querySelector('[data-sheet-drag]');
+  var grabEl = app.querySelector('[data-grab-handle]');
+  if (!sheetEl) return;
+  if (grabEl) {
+    grabEl.addEventListener('touchstart', function () { _grab = true; }, { passive: true });
+  }
+  sheetEl.addEventListener('touchstart', function (e) {
+    _y0 = (_grab || sheetEl.scrollTop <= 0) ? e.touches[0].clientY : null;
+    _grab = false;
+  }, { passive: true });
+  sheetEl.addEventListener('touchmove', function (e) {
+    if (_y0 == null) return;
+    var dy = e.touches[0].clientY - _y0;
+    if (dy <= 0) { if (UI.drag) setUI({ drag: 0, dragging: true }); return; }
+    if (e.cancelable) e.preventDefault();
+    UI.drag = dy; UI.dragging = true;
+    sheetEl.style.transform = 'translateY(' + dy + 'px)';
+    sheetEl.style.transition = 'none';
+  }, { passive: false });
+  var onEnd = function () {
+    var dy = UI.drag || 0;
+    _y0 = null; _grab = false;
+    if (dy > 100) setUI({ sheet: null, drag: 0, dragging: false });
+    else setUI({ drag: 0, dragging: false });
+  };
+  sheetEl.addEventListener('touchend', onEnd);
+  sheetEl.addEventListener('touchcancel', onEnd);
+}
+
+function render() {
+  applyTheme();
+  var v = computeVals();
+  REG = {}; RC = 0;
+  var focusInfo = captureFocus();
+  app.innerHTML = appHTML(v);
+  restoreFocus(focusInfo);
+  wireSheetTouch();
+}
+
+app.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-c]');
+  if (t) { var fn = REG[t.getAttribute('data-c')]; if (fn) fn(e); }
+});
+app.addEventListener('input', function (e) {
+  var t = e.target.closest('[data-i]');
+  if (t) { var fn = REG[t.getAttribute('data-i')]; if (fn) fn(e); }
+});
+
+render();
+</script>
+</body>
+</html>
+</body>
+</html>
