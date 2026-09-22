@@ -50,8 +50,8 @@ body.force-dark .logo-d,body.force-dark .ico-moon{display:none}
 body.force-dark .logo-w,body.force-dark .ico-sun{display:block}
 body.force-light .logo-d,body.force-light .ico-moon{display:block}
 body.force-light .logo-w,body.force-light .ico-sun{display:none}
-.tbtn{display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;background:transparent;border:1px solid var(--rule);border-radius:2px;color:var(--muted);cursor:pointer;flex:0 0 auto}
-.tbtn:hover{border-color:var(--teal);color:var(--teal)}
+.tbtn{display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;background:transparent;border:0;color:var(--muted);cursor:pointer;flex:0 0 auto}
+.tbtn:hover{color:var(--teal)}
 .tbtn svg{width:20px;height:20px}
 
 /* ---------- deals home ---------- */
@@ -178,6 +178,20 @@ body.force-light .logo-w,body.force-light .ico-sun{display:none}
    ===================================================================== */
 var DEALS = [
   {
+    ref: "CDX-86",
+    address: "96 Empire Road, Perivale",
+    overview: "Residential purchase bridge secured on a property in Perivale, West London. Fixed 9.50% p.a., paid upon redemption, exit by sale.",
+    summary: "Residential purchase bridging loan secured by a first legal charge over a freehold property at 96 Empire Road, Perivale. Interest is retained and paid upon redemption together with capital. Exit is by sale of the property, targeted 2 April 2027.",
+    netRequired: 424650.00,
+    termMonths: 6,
+    fixedRate: 0.095,
+    status: "open",
+    closes: "",
+    calcUrl: "CredX Return Calculator CDX-86.dc.html",
+    termSheetUrl: "",
+    valuationUrl: ""
+  },
+  {
     ref: "CDX-55",
     address: "Barrow House, Higher St, Bridport",
     overview: "First-charge bridging loan on an unencumbered residential freehold in Bridport, Dorset. 18.99% gross to value on a short-dated three-month facility.",
@@ -185,7 +199,7 @@ var DEALS = [
     netRequired: 68523.15,
     termMonths: 3,
     fixedRate: 0.12,
-    status: "open",
+    status: "funded",
     closes: "",
     termSheetUrl: "",
     valuationUrl: ""
@@ -197,8 +211,8 @@ var DEALS = [
     summary: "Residential bridging loan secured by a first legal charge over a three-storey mid-terraced freehold house in Hounslow, West London, supported by a second charge over the borrower's further freehold property in Feltham.",
     netRequired: 333198.74,
     termMonths: 6,
-    status: "open",
-    closes: "Expressions of interest close 26 August 2026",
+    status: "funded",
+    closes: "",
     termSheetUrl: "",
     valuationUrl: ""
   }
@@ -443,7 +457,7 @@ var DOC_DIR = "docs";
         var d=DEALS[i], live=isOpen(d);
         var docs='';
         if(live){
-          docs += link('?deal='+encodeURIComponent(d.ref), 'Investment calculator', 'Model your return at any amount');
+          docs += link(d.calcUrl || ('?deal='+encodeURIComponent(d.ref)), 'Investment calculator', 'Model your return at any amount');
         }
         var tsId='ts-'+i, vrId='vr-'+i;
         docs += link(d.termSheetUrl || mailto('Term Sheet request - '+d.ref+' '+d.address),
